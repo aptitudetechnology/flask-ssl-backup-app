@@ -305,6 +305,11 @@ export class GPGBackupModal {
      * Real backup integration with your Flask backend
      */
     async startBackup() {
+        // Prevent backup if confirm button is disabled (should only be enabled after key import)
+        if (this.confirmCreateBackupBtn && this.confirmCreateBackupBtn.disabled) {
+            // Optionally show a warning or do nothing
+            return;
+        }
         this.showStep('progress');
         this.updateProgress(0, 'Initializing backup...');
 
