@@ -1,16 +1,50 @@
+# Core Flask Application
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
-python-gnupg==0.5.0
-cryptography==41.0.4
-schedule==1.2.0
-python-dateutil==2.8.2
 Werkzeug==2.3.7
 Jinja2==3.1.2
 MarkupSafe==2.1.3
 itsdangerous==2.1.2
 click==8.1.7
 blinker==1.6.2
+
+# Database
 SQLAlchemy==2.0.21
 greenlet==2.0.2
+
+# Security & Encryption
+python-gnupg==0.5.0
+cryptography==41.0.4
+
+# Scheduling & Date Handling
+schedule==1.2.0
+python-dateutil==2.8.2
 pytz==2023.3
 six==1.16.0
+
+# SQLite Backup Tools (choose one or both)
+sqlite-utils==3.36           # CLI and Python API for SQLite operations
+flask-alchemydumps==0.0.11   # Flask-specific SQLAlchemy backup tool
+
+# Development & Code Quality
+ruff==0.12.4
+
+# Optional: Enhanced backup functionality
+# python-dotenv==1.0.0       # For environment variable management
+# psutil==5.9.5               # For system monitoring during backups
+# tqdm==4.66.1                # Progress bars for long backup operations
+
+# Optional: Enhanced security
+# flask-limiter==3.5.0        # Rate limiting for web interface
+# flask-talisman==1.1.0       # Security headers
+
+# Optional: Better logging
+# colorlog==6.7.0             # Colored console logs
+
+# Optional: Testing (if you want to expand your test suite)
+# pytest==7.4.2
+# pytest-flask==1.2.1
+# pytest-cov==4.1.0
+
+# Optional: Database migrations
+# flask-migrate==4.0.5        # If you need database schema migrations
