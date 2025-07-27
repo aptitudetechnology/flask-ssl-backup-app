@@ -3,23 +3,23 @@
 import os
 from pathlib import Path
 from typing import Optional, Dict
-from datetime import datetime, timedelta # Ensure these are imported for utility methods
-
+from datetime import datetime, timedelta
 
 class AppPaths:
     """Centralized path management using pathlib"""
 
     def __init__(self, app_root: Optional[Path] = None):
-        # Determine the application root. Prioritize explicit app_root, then a common parent structure.
-        # This assumes the project root is two levels up from paths.py (e.g., app_root/paths.py)
-        # Using Path(__file__).parent.parent as a fallback is generally robust.
-        self.app_root = Path(app_root) if app_root else Path(__file__).parent.parent
+        # Force the app_root to be the parent directory of this paths.py file.
+        # This assumes paths.py is directly within your main application folder
+        # (e.g., /home/chris/flask-ssl-backup-app/paths.py).
+        # This bypasses any potential issues with how app_root is passed via config.py
+        # or how __file__ resolves in other modules.
+        self.app_root = Path(__file__).parent 
         
         # Initialize internal variables for directories that are properties
-        # This ensures they are available before _ensure_directories is called
         self._data_dir_path = self.app_root / "data"
         self._log_dir_path = self.app_root / "logs"
-        self._ssl_dir_path = self.app_root / "ssl" # CORRECTED: Changed self.app.root to self.app_root
+        self._ssl_dir_path = self.app_root / "ssl" 
         
         # Call _ensure_directories to create all necessary folders on initialization
         self._ensure_directories()
@@ -44,7 +44,7 @@ class AppPaths:
     # --- SSL certificate paths ---
     @property
     def ssl_dir(self) -> Path:
-        # Use the internally managed path, allowing override via env var
+        # Allow environment variable override, but fallback to our forcefully set app_root / "ssl"
         return Path(os.environ.get('SSL_CERT_DIR', self._ssl_dir_path))
 
     @property
@@ -61,7 +61,7 @@ class AppPaths:
         return Path(os.environ.get('BACKUP_DIR', self.data_dir / "backups"))
 
     @property
-    def temp_dir(self) -> Path: # General temporary directory within data_dir
+    def temp_dir(self) -> Path:
         return self.data_dir / "temp"
 
     @property
@@ -71,13 +71,10 @@ class AppPaths:
     # --- GPG paths ---
     @property
     def gpg_home_dir(self) -> Path:
-        # CRITICAL CHANGE: GPG home directory is now isolated within app's data folder
         return Path(os.environ.get('GPG_HOME_DIR', self.data_dir / "gpg"))
 
     @property
     def gpg_keys_dir(self) -> Path:
-        # This property might not be strictly necessary as gnupg manages its own structure
-        # within gpg_home_dir, but keeping it for consistency if you use it elsewhere.
         return self.gpg_home_dir / "keys"
 
     # --- Logging paths ---
@@ -98,13 +95,12 @@ class AppPaths:
         return self.log_dir / "backup.log"
 
     @property
-    def gpg_log_file(self) -> Path: # ADDED: GPG specific log file
+    def gpg_log_file(self) -> Path:
         return self.log_dir / "gpg_backup.log"
 
     # --- Utility methods ---
     def _ensure_directories(self):
         """Ensures all necessary directories exist."""
-        # Create core directories first, as others depend on them
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -115,7 +111,7 @@ class AppPaths:
             self.ssl_dir,
             self.static_dir,
             self.templates_dir,
-            self.gpg_home_dir # Ensure GPG home dir is created
+            self.gpg_home_dir
         ]
         for directory in dirs_to_create:
             try:
@@ -136,8 +132,8 @@ class AppPaths:
             'static_dir_exists': self.static_dir.is_dir(),
             'templates_dir_exists': self.templates_dir.is_dir(),
             'gpg_home_dir_exists': self.gpg_home_dir.is_dir(),
-            'temp_dir_exists': self.temp_dir.is_dir(), # Added for completeness
-            'archive_backup_dir_exists': self.archive_backup_dir.is_dir() # Added for completeness
+            'temp_dir_exists': self.temp_dir.is_dir(),
+            'archive_backup_dir_exists': self.archive_backup_dir.is_dir()
         }
         
         files_to_check = {
@@ -145,7 +141,7 @@ class AppPaths:
             'log_file': self.log_file,
             'error_log_file': self.error_log_file,
             'backup_log_file': self.backup_log_file,
-            'gpg_log_file': self.gpg_log_file, # Corrected line
+            'gpg_log_file': self.gpg_log_file,
             'ssl_cert_file': self.ssl_cert_file,
             'ssl_key_file': self.ssl_key_file
         }
@@ -153,17 +149,14 @@ class AppPaths:
         return results
 
     def get_backup_filename(self, backup_type="regular", timestamp=None) -> str:
-        # This method is fine as is
         if not timestamp:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"backup_{backup_type}_{timestamp}.db"
 
     def get_gpg_backup_filename(self, original_filename: str) -> str:
-        # This method is fine as is
         return f"{original_filename}.gpg"
 
     def cleanup_old_backups(self, max_age_days=30) -> int:
-        # This method is fine as is
         cutoff = datetime.now() - timedelta(days=max_age_days)
         count = 0
         if not self.backup_dir.exists():
