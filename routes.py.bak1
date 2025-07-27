@@ -36,7 +36,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
             password = request.form.get('password')
 
             if username and password:
-                user = User.query.filter_by(username=username).first()
+                user = app.models.User.query.filter_by(username=username).first()
                 if user and user.check_password(password):  # Assuming this method exists
                     session['user_id'] = user.id
                     session['username'] = user.username
@@ -88,10 +88,10 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
         search = request.args.get('search', '')
         status = request.args.get('status', '')
         if search:
-            customer_list = CustomerService.search_customers(search)
+            customer_list = app.models.CustomerService.search_customers(search)
         else:
             active_only = (status != 'inactive')
-            customer_list = CustomerService.get_all_customers(active_only=active_only)
+            customer_list = app.models.CustomerService.get_all_customers(active_only=active_only)
         return render_template('customers.html', customers=customer_list)
 
     @app.route('/backup/create', methods=['POST'])
@@ -109,7 +109,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
                 user_id=user_id
             )
 
-            backup_record = BackupRecord(
+            backup_record = app.models.BackupRecord(
                 filename=backup_file.name,
                 backup_type=backup_type,
                 description=description,
@@ -148,7 +148,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
     def list_backups():
         """List available backups with database records"""
         try:
-            backup_records = BackupRecord.query.order_by(BackupRecord.created_at.desc()).all()
+            backup_records = app.models.BackupRecord.query.order_by(app.models.BackupRecord.created_at.desc()).all()
             backup_data = []
 
             for record in backup_records:
@@ -182,7 +182,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
     def download_backup(backup_name):
         """Download backup file"""
         try:
-            backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
+            backup_record = app.models.BackupRecord.query.filter_by(filename=backup_name).first()
             if not backup_record:
                 flash('Backup record not found', 'error')
                 return redirect(url_for('dashboard'))
@@ -217,7 +217,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
             if not backup_name:
                 return jsonify({'success': False, 'error': 'No backup specified'}), 400
 
-            backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
+            backup_record = app.models.BackupRecord.query.filter_by(filename=backup_name).first()
             if not backup_record:
                 return jsonify({'success': False, 'error': 'Backup record not found'}), 404
 
