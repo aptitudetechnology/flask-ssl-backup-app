@@ -145,18 +145,9 @@ if __name__ == '__main__':
         cert_file = config.paths.ssl_dir / 'cert.pem'
         key_file = config.paths.ssl_dir / 'key.pem'
 
-        # --- ADDED DEBUG PRINT STATEMENTS ---
-        print(f"DEBUG: SSL_ENABLED is True in config.")
-        print(f"DEBUG: Checking for SSL cert at: {cert_file}")
-        print(f"DEBUG: Checking for SSL key at: {key_file}")
-        # --- END ADDED DEBUG PRINT STATEMENTS ---
-
         if cert_file.exists() and key_file.exists():
             ssl_context = (str(cert_file), str(key_file))
             app.logger.info("SSL enabled with certificates")
-            # --- ADDED DEBUG PRINT STATEMENT ---
-            print(f"DEBUG: SSL context set with: {ssl_context}")
-            # --- END ADDED DEBUG PRINT STATEMENT ---
         else:
             app.logger.warning("SSL certificates not found, running without SSL")
 
