@@ -266,51 +266,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Unified AJAX backup submission function
     function submitBackupFormAJAX() {
-        const formData = new FormData(backupForm);
-        fetch('/backup/create', {
-            method: 'POST',
-            body: formData
-        })
-        .then(async response => {
-            const contentType = response.headers.get('Content-Type');
-            const disposition = response.headers.get('Content-Disposition');
-            // Treat as file if Content-Disposition: attachment is present, regardless of Content-Type
-            if (response.ok && disposition && disposition.includes('attachment')) {
-                let filename = 'backup';
-                if (disposition.includes('filename=')) {
-                    filename = disposition.split('filename=')[1].split(';')[0].replace(/"/g, '').trim();
-                }
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    window.URL.revokeObjectURL(url);
-                    a.remove();
-                }, 100);
-                // Optionally show a toast or notification here
-                return;
-            }
-            // If not a file, try to parse JSON error (only if not a file)
-            let data;
-            try {
-                data = await response.json();
-            } catch (e) {
-                data = null;
-            }
-            if (data && data.error) {
-                alert('Backup failed: ' + data.error);
-            } else {
-                alert('Backup failed: ' + (response.statusText || 'Unknown error'));
-            }
-        })
-        .catch(err => {
-            alert('Backup failed: ' + err);
-        });
-    }
+    const formData = new FormData(backupForm);
+    fetch('/backup/create', {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Parse the JSON response
+        const data = await response.json();
+        
+        if (data.success && data.download_url) {
+            // Trigger download using the provided URL
+            window.location.href = data.download_url;
+            // Or alternatively:
+            // window.open(data.download_url, '_blank');
+        } else if (data.error) {
+            alert('Backup failed: ' + data.error);
+        } else {
+            alert('Backup failed: Unknown error');
+        }
+    })
+    .catch(err => {
+        alert('Backup failed: ' + err.message);
+    });
+}
 
     // Form submission handler - this is the *single* and correct one
     backupForm?.addEventListener('submit', function (e) {
