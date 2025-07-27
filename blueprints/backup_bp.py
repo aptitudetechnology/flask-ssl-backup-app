@@ -1,29 +1,3 @@
-@backup_bp.route('/download/<backup_name>')
-@login_required
-def download_backup(backup_name):
-    """Download backup file - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'Download not yet implemented'
-    })
-
-@backup_bp.route('/restore', methods=['POST'])
-@login_required
-def restore_backup():
-    """Restore from backup - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'Restore not yet implemented'
-    })
-
-@backup_bp.route('/gpg/import', methods=['POST'])
-@login_required
-def gpg_import_key():
-    """Import GPG key - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'GPG import not yet implemented'
-    })
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, current_app
 from functools import wraps
 
