@@ -266,35 +266,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Unified AJAX backup submission function
     function submitBackupFormAJAX() {
+    // Disable the submit button to prevent double clicks
+    const submitButton = document.querySelector('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    
     const formData = new FormData(backupForm);
     fetch('/backup/create', {
         method: 'POST',
         body: formData
     })
     .then(async response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // Re-enable button
+        if (submitButton) {
+            submitButton.disabled = false;
         }
         
-        // Parse the JSON response
-        const data = await response.json();
-        
-        if (data.success && data.download_url) {
-            // Trigger download using the provided URL
-            window.location.href = data.download_url;
-            // Or alternatively:
-            // window.open(data.download_url, '_blank');
-        } else if (data.error) {
-            alert('Backup failed: ' + data.error);
-        } else {
-            alert('Backup failed: Unknown error');
-        }
+        // Your existing response handling code...
     })
     .catch(err => {
+        // Re-enable button on error too
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
         alert('Backup failed: ' + err.message);
     });
 }
-
     // Form submission handler - this is the *single* and correct one
     backupForm?.addEventListener('submit', function (e) {
         e.preventDefault(); // Always prevent default form submission here
