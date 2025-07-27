@@ -55,6 +55,9 @@ class DatabaseBackup:
             Path to created backup file or None if failed
         """
         try:
+            self.logger.debug(f"Starting backup creation. compress={compress}, include_metadata={include_metadata}")
+            self.logger.debug(f"Database file: {self.paths.database_file}")
+            self.logger.debug(f"Backup directory: {self.paths.backup_dir}")
             # Check if source database exists
             if not self.paths.database_file.exists():
                 self.logger.error(f"Source database not found: {self.paths.database_file}")
@@ -63,21 +66,28 @@ class DatabaseBackup:
             # Generate backup filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_name = f"backup_{timestamp}.db"
+            self.logger.debug(f"Generated backup name: {backup_name}")
             
             if compress:
                 backup_name += ".gz"
+                self.logger.debug("Compression enabled, updated backup name: %s", backup_name)
             
             backup_path = self.paths.backup_dir / backup_name
+            self.logger.debug(f"Backup path: {backup_path}")
             
             # Create backup
             if compress:
+                self.logger.debug("Calling _create_compressed_backup")
                 success = self._create_compressed_backup(backup_path)
             else:
+                self.logger.debug("Calling _create_simple_backup")
                 success = self._create_simple_backup(backup_path)
             
             if success:
+                self.logger.debug("Backup file created: %s", backup_path)
                 # Add metadata if requested
                 if include_metadata:
+                    self.logger.debug("Creating backup metadata for: %s", backup_path)
                     self._create_backup_metadata(backup_path)
                 
                 self.logger.info(f"Backup created successfully: {backup_path}")
@@ -93,12 +103,14 @@ class DatabaseBackup:
     def _create_simple_backup(self, backup_path: Path) -> bool:
         """Create a simple file copy backup"""
         try:
+            self.logger.debug(f"Starting _create_simple_backup to {backup_path}")
             # Use SQLite backup API for consistent backup
             source_conn = sqlite3.connect(str(self.paths.database_file))
             backup_conn = sqlite3.connect(str(backup_path))
             
             # Perform backup
             source_conn.backup(backup_conn)
+            self.logger.debug(f"SQLite backup API completed from {self.paths.database_file} to {backup_path}")
             
             # Close connections
             backup_conn.close()
@@ -110,7 +122,9 @@ class DatabaseBackup:
             self.logger.error(f"Simple backup failed: {str(e)}")
             # Fallback to file copy
             try:
+                self.logger.debug(f"Attempting fallback copy2 from {self.paths.database_file} to {backup_path}")
                 shutil.copy2(self.paths.database_file, backup_path)
+                self.logger.debug(f"Fallback copy2 succeeded")
                 return True
             except Exception as fallback_error:
                 self.logger.error(f"Fallback backup failed: {str(fallback_error)}")
@@ -119,10 +133,13 @@ class DatabaseBackup:
     def _create_compressed_backup(self, backup_path: Path) -> bool:
         """Create a compressed backup"""
         try:
+            self.logger.debug(f"Starting _create_compressed_backup to {backup_path}")
             # First create temporary uncompressed backup
             temp_backup = self.paths.temp_dir / f"temp_backup_{datetime.now().timestamp()}.db"
+            self.logger.debug(f"Temporary backup path: {temp_backup}")
             
             if self._create_simple_backup(temp_backup):
+                self.logger.debug(f"Compressing {temp_backup} to {backup_path}")
                 # Compress the backup
                 with temp_backup.open('rb') as f_in:
                     with gzip.open(backup_path, 'wb') as f_out:
@@ -130,8 +147,10 @@ class DatabaseBackup:
                 
                 # Clean up temporary file
                 temp_backup.unlink()
+                self.logger.debug(f"Compressed backup created at {backup_path}")
                 return True
             else:
+                self.logger.error(f"Failed to create temporary backup for compression: {temp_backup}")
                 return False
                 
         except Exception as e:
