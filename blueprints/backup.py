@@ -291,10 +291,10 @@ def restore_backup():
             return jsonify({'success': False, 'error': 'Backup file not found on server storage.'}), 404
 
         # Create a pre-restore backup (important safety measure)
+        # Only pass supported arguments: compress and include_metadata
         current_backup = backup_manager.create_backup(
-            backup_type='pre_restore',
-            description=f'Pre-restore backup before restoring {backup_path.name}',
-            user_id=session.get('user_id')
+            compress=True,
+            include_metadata=True
         )
         if not current_backup:
             return jsonify({'success': False, 'error': 'Failed to create pre-restore backup'}), 500
