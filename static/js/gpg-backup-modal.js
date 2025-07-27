@@ -226,6 +226,11 @@ export class GPGBackupModal {
         this.progressLabel = document.getElementById('progressLabel'); // Corrected ID
         this.progressStatus = document.getElementById('backupStatusMessage'); // Corrected ID
 
+        // Ensure the Create Encrypted Backup button has its click handler set
+        if (this.confirmCreateBackupBtn) {
+            this.confirmCreateBackupBtn.onclick = () => this.startBackup();
+        }
+
         this.showStep('keySetup');
     }
 
