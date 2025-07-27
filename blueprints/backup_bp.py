@@ -134,8 +134,11 @@ def restore_backup():
 @backup_bp.route('/gpg/import', methods=['POST'])
 @login_required
 def gpg_import_key():
-    """Import GPG key - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'GPG import not yet implemented'
-    })
+    key_id = request.json.get('key_id') if request.is_json else request.form.get('key_id')
+    if not key_id:
+        return jsonify({'success': False, 'error': 'Key ID is required'}), 400
+
+    from utils.gpg_backup import GPGBackup
+    gpg_backup = GPGBackup(current_app.config)
+    result = gpg_backup.import_key(key_id)
+    return jsonify(result)
