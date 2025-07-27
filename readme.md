@@ -7,4 +7,7 @@ To get started git clone this repo and then chmod +x run-flask-backup.py
 
 gen-cert.sh for generating an ssl certificate is in the ssl folder.
 
+login: admin
+password: admin123
+
 <img width="1294" height="843" alt="Screenshot From 2025-07-27 19-19-56" src="https://github.com/user-attachments/assets/2ad1aa50-d34e-45ab-95b3-6d60081163a6" />
