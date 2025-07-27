@@ -152,6 +152,14 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
         try:
             # Only supported args for create_backup
             backup_file = backup_manager.create_backup()
+            if backup_file is None:
+                app.logger.error("Backup creation failed: backup_manager.create_backup() returned None")
+                db.session.rollback()
+                flash('Backup creation failed: could not create backup file', 'error')
+                return jsonify({
+                    'success': False,
+                    'error': 'Backup creation failed: could not create backup file'
+                }), 500
 
             # Get extra info for BackupRecord
             backup_type = request.form.get('backup_type', 'regular')
