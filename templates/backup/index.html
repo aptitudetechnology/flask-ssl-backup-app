@@ -264,9 +264,8 @@ document.addEventListener('DOMContentLoaded', function () {
         emailInput.required = show;
     });
 
-    // AJAX form submission to show JSON response
-    backupForm?.addEventListener('submit', function (e) {
-        e.preventDefault();
+    // Unified AJAX backup submission function
+    function submitBackupFormAJAX() {
         const formData = new FormData(backupForm);
         fetch('/backup/create', {
             method: 'POST',
@@ -283,6 +282,40 @@ document.addEventListener('DOMContentLoaded', function () {
         .catch(err => {
             alert('Backup failed: ' + err);
         });
+    }
+
+    // Form submission handler
+    backupForm?.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const gpgChecked = encryptCheckbox?.checked;
+        if (gpgChecked) {
+            // Validate email
+            const email = emailInput?.value.trim();
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!email || !emailPattern.test(email)) {
+                alert('Please provide a valid email address for GPG encryption.');
+                emailInput.focus();
+                return;
+            }
+            // Find the modal
+            const modalElement = document.getElementById('gpgConfirmationModal');
+            if (!modalElement) {
+                alert('GPG modal not found in the DOM. Check that it\'s included correctly.');
+                console.error('Available modals:', Array.from(document.querySelectorAll('.modal')).map(m => m.id));
+                return;
+            }
+            // Initialize and show modal using the ES module class
+            if (!window.gpgModalInstance) {
+                window.gpgModalInstance = new GPGBackupModal('gpgConfirmationModal');
+            }
+            window.gpgModalInstance.setEncryptionEmail(email);
+            // When the modal is confirmed, call submitBackupFormAJAX
+            window.gpgModalInstance.onConfirm = submitBackupFormAJAX;
+            window.gpgModalInstance.show();
+        } else {
+            // Non-GPG backup: submit via AJAX
+            submitBackupFormAJAX();
+        }
     });
 
     // Toggle GPG email field visibility
