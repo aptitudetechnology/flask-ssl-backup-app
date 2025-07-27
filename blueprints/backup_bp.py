@@ -63,7 +63,18 @@ def create_backup_route():
             if encrypted_path:
                 return jsonify({'success': True, 'backup': str(encrypted_path.name)})
             else:
-                return jsonify({'success': False, 'error': 'Encryption failed'}), 500
+                # Try to get the last error from the GPGBackup logger or return a generic message
+                import logging
+                logger = logging.getLogger('gpg_backup_logger')
+                last_error = None
+                if logger.handlers:
+                    for handler in logger.handlers:
+                        if hasattr(handler, 'stream') and hasattr(handler.stream, 'getvalue'):
+                            try:
+                                last_error = handler.stream.getvalue()
+                            except Exception:
+                                pass
+                return jsonify({'success': False, 'error': last_error or 'Encryption failed'}), 500
         else:
             return jsonify({'success': True, 'backup': str(backup_path.name)})
     except Exception as e:
