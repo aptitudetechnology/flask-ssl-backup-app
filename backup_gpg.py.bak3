@@ -63,27 +63,10 @@ class GPGBackup:
         if not self.gpg.list_keys(False, keys=recipient_email):
             self.logger.info(f"Recipient key for {recipient_email} not found locally. Attempting to search and import from keyserver.")
             search_result = self.gpg.search_keys(recipient_email, keyserver=self.config.GPG_KEYSERVER)
-
-            self.logger.debug(f"DEBUG: GPG search_keys result: {search_result}")
-
             if search_result:
-                fingerprints = []
-                for key in search_result:
-                    if 'fingerprint' in key:
-                        fingerprints.append(key['fingerprint'])
-                    else:
-                        self.logger.warning(f"Skipping key found without 'fingerprint': {key}")
-                
-                if not fingerprints: # If no valid fingerprints were found
-                    self.logger.warning(f"No valid GPG fingerprints found for {recipient_email} despite search results.")
-                    return None
+                fingerprints = [key['fingerprint'] for key in search_result]
                 self.logger.info(f"Found keys: {fingerprints}. Importing first key.")
                 import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, *fingerprints[:1]) # Import only the first found key
-                
-                self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
-                self.logger.debug(f"DEBUG: GPG recv_keys status: {import_result.status}")
-                self.logger.debug(f"DEBUG: GPG recv_keys stderr: {import_result.stderr}")
-                
                 if import_result.results:
                     self.logger.info(f"Key imported: {import_result.results[0].get('fingerprint', 'N/A')}")
                 else:
