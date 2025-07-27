@@ -126,6 +126,11 @@ def create_backup_route():
         final_download_path = backup_file_path
         if encrypt_gpg and gpg_backup and gpg_email:
             try:
+                # --- ADD THESE TWO DEBUG LINES HERE ---
+                current_app.logger.debug(f"DEBUG: Type of gpg_backup: {type(gpg_backup)}")
+                current_app.logger.debug(f"DEBUG: Methods available on gpg_backup: {dir(gpg_backup)}")
+                # --- END OF DEBUG LINES ---
+
                 # The create_encrypted_backup needs the path to the unencrypted file
                 # and the email for encryption
                 encrypted_file_path = gpg_backup.create_encrypted_backup(
