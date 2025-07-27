@@ -26,7 +26,8 @@ class DatabaseBackup:
         
         # Ensure backup directories exist
         self.paths.backup_dir.mkdir(parents=True, exist_ok=True)
-        self.paths.logs_dir.mkdir(parents=True, exist_ok=True)
+        self.paths.log_dir.mkdir(parents=True, exist_ok=True)
+
     
     def _setup_logging(self):
         """Setup logging for backup operations"""
