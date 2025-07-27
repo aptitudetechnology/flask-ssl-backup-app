@@ -20,4 +20,13 @@ def create_backup():
         return jsonify({'success': False, 'error': 'Backup creation failed'}), 500
     return send_file(str(backup_file), as_attachment=True, download_name=backup_file.name)
 
-# Add other routes (list, download, restore, gpg/search, gpg/import) as needed
+@backup_bp.route('/list', methods=['GET'])
+def list_backups():
+    backup_manager = current_app.extensions.get('backup_manager')
+    if not backup_manager:
+        return jsonify({'success': False, 'error': 'Backup manager not available'}), 500
+    backups = backup_manager.list_backups()
+    # You can render a template or return JSON; here we render a template
+    return render_template('backup/list.html', backups=backups)
+
+# Add other routes (download, restore, gpg/search, gpg/import) as needed
