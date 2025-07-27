@@ -1,4 +1,4 @@
-# backup_gpg.py
+# backup_gpg.py.
 
 import gnupg
 import logging
