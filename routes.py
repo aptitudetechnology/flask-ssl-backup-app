@@ -81,10 +81,34 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
                                    db_info={},
                                    health_status={})
 
-    @app.route('/customers')
+    @app.route('/customers', methods=['GET', 'POST'])
     @login_required
     def customers():
-        """Customer list page"""
+        """Customer list page and add customer handler"""
+        if request.method == 'POST':
+            name = request.form.get('name')
+            email = request.form.get('email')
+            phone = request.form.get('phone')
+            address = request.form.get('address')
+            company = request.form.get('company')
+            notes = request.form.get('notes')
+            # Basic validation
+            if not name or not email:
+                flash('Name and email are required.', 'danger')
+            elif CustomerService.get_customer_by_email(email):
+                flash('A customer with this email already exists.', 'warning')
+            else:
+                CustomerService.create_customer(
+                    name=name,
+                    email=email,
+                    phone=phone,
+                    address=address,
+                    company=company,
+                    notes=notes
+                )
+                flash('Customer added successfully!', 'success')
+            return redirect(url_for('customers'))
+        # GET: show list
         search = request.args.get('search', '')
         status = request.args.get('status', '')
         if search:
