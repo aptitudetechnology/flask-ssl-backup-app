@@ -29,4 +29,20 @@ def list_backups():
     # You can render a template or return JSON; here we render a template
     return render_template('backup/list.html', backups=backups)
 
-# Add other routes (download, restore, gpg/search, gpg/import) as needed
+
+@backup_bp.route('/gpg/search', methods=['POST'])
+def gpg_search():
+    # Placeholder implementation
+    data = request.get_json() or {}
+    email = data.get('email')
+    gpg_backup = current_app.extensions.get('gpg_backup')
+    if not gpg_backup:
+        return jsonify({'success': False, 'error': 'GPG backup not available'}), 500
+    # TODO: Implement actual search_keys logic in GPGBackup
+    return jsonify({'success': False, 'error': 'GPG search not implemented yet'})
+
+# GPG key import endpoint (placeholder)
+@backup_bp.route('/gpg/import', methods=['POST'])
+def gpg_import():
+    # Placeholder for GPG key import logic
+    return jsonify({'success': True, 'message': 'GPG key import placeholder'})
