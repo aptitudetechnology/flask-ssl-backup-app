@@ -1,0 +1,421 @@
+"""
+Configuration module with pathlib integration
+Handles all application paths and settings
+"""
+
+import os
+from pathlib import Path
+from paths import AppPaths  
+from datetime import timedelta
+from typing import Optional, Dict, Any
+
+
+class AppPaths:
+    """Centralized path management using pathlib"""
+    
+    def __init__(self, app_root: Optional[Path] = None):
+        """
+        Initialize path manager
+        
+        Args:
+            app_root: Root directory for the application (defaults to current directory)
+        """
+        self.app_root = Path(app_root) if app_root else Path.cwd()
+        self._ensure_directories()
+    
+    # Core application paths
+    @property
+    def database_file(self) -> Path:
+        """SQLite database file path"""
+        return self.app_root / "customers.db"
+    
+    @property
+    def static_dir(self) -> Path:
+        """Flask static files directory"""
+        return self.app_root / "static"
+    
+    @property
+    def templates_dir(self) -> Path:
+        """Flask templates directory"""
+        return self.app_root / "templates"
+    
+    # SSL certificate paths
+    @property
+    def ssl_dir(self) -> Path:
+        """SSL certificates directory"""
+        ssl_path = os.environ.get('SSL_CERT_DIR')
+        if ssl_path:
+            return Path(ssl_path)
+        return self.app_root / "certs"
+    
+    @property
+    def ssl_cert_file(self) -> Path:
+        """SSL certificate file"""
+        cert_path = os.environ.get('SSL_CERT_PATH')
+        if cert_path:
+            return Path(cert_path)
+        return self.ssl_dir / "cert.pem"
+    
+    @property
+    def ssl_key_file(self) -> Path:
+        """SSL private key file"""
+        key_path = os.environ.get('SSL_KEY_PATH')
+        if key_path:
+            return Path(key_path)
+        return self.ssl_dir / "key.pem"
+    
+    # Backup paths
+    @property
+    def backup_dir(self) -> Path:
+        """Backup files directory"""
+        backup_path = os.environ.get('BACKUP_DIR')
+        if backup_path:
+            return Path(backup_path)
+        return self.app_root / "backups"
+    
+    @property
+    def temp_backup_dir(self) -> Path:
+        """Temporary backup files directory"""
+        return self.backup_dir / "temp"
+    
+    @property
+    def archive_backup_dir(self) -> Path:
+        """Archived backup files directory"""
+        return self.backup_dir / "archive"
+    
+    # GPG paths
+    @property
+    def gpg_home_dir(self) -> Path:
+        """GPG home directory"""
+        gpg_home = os.environ.get('GPG_HOME_DIR')
+        if gpg_home:
+            return Path(gpg_home)
+        return Path.home() / ".gnupg"
+    
+    @property
+    def gpg_keys_dir(self) -> Path:
+        """GPG keys directory"""
+        return self.gpg_home_dir / "keys"
+    
+    # Logging paths
+    @property
+    def log_dir(self) -> Path:
+        """Log files directory"""
+        log_path = os.environ.get('LOG_DIR')
+        if log_path:
+            return Path(log_path)
+        return self.app_root / "logs"
+    
+    @property
+    def log_file(self) -> Path:
+        """Main application log file"""
+        return self.log_dir / "app.log"
+    
+    @property
+    def error_log_file(self) -> Path:
+        """Error log file"""
+        return self.log_dir / "error.log"
+    
+    @property
+    def backup_log_file(self) -> Path:
+        """Backup operations log file"""
+        return self.log_dir / "backup.log"
+    
+    # Utility methods
+    def _ensure_directories(self):
+        """Create necessary directories if they don't exist"""
+        directories = [
+            self.backup_dir,
+            self.temp_backup_dir,
+            self.archive_backup_dir,
+            self.log_dir,
+            self.ssl_dir,
+            self.static_dir,
+            self.templates_dir
+        ]
+        
+        for directory in directories:
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                print(f"Warning: Cannot create directory {directory} - permission denied")
+            except Exception as e:
+                print(f"Warning: Failed to create directory {directory}: {str(e)}")
+    
+    def validate_paths(self) -> Dict[str, bool]:
+        """Validate that all required paths exist and are accessible"""
+        validation_results = {}
+        
+        # Check directories
+        directories = {
+            'backup_dir': self.backup_dir,
+            'log_dir': self.log_dir,
+            'ssl_dir': self.ssl_dir,
+            'static_dir': self.static_dir,
+            'templates_dir': self.templates_dir
+        }
+        
+        for name, path in directories.items():
+            validation_results[name] = path.exists() and path.is_dir()
+        
+        # Check files (optional - don't fail if they don't exist)
+        optional_files = {
+            'ssl_cert': self.ssl_cert_file,
+            'ssl_key': self.ssl_key_file,
+            'database': self.database_file
+        }
+        
+        for name, path in optional_files.items():
+            validation_results[f"{name}_exists"] = path.exists()
+        
+        return validation_results
+    
+    def get_backup_filename(self, backup_type: str = "regular", timestamp: Optional[str] = None) -> str:
+        """Generate backup filename with timestamp"""
+        from datetime import datetime
+        
+        if not timestamp:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        return f"backup_{backup_type}_{timestamp}.db"
+    
+    def get_gpg_backup_filename(self, original_filename: str) -> str:
+        """Generate GPG encrypted backup filename"""
+        return f"{original_filename}.gpg"
+    
+    def cleanup_old_backups(self, max_age_days: int = 30) -> int:
+        """Remove backup files older than specified days"""
+        from datetime import datetime, timedelta
+        
+        if not self.backup_dir.exists():
+            return 0
+        
+        cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        removed_count = 0
+        
+        try:
+            for backup_file in self.backup_dir.glob("backup_*.db*"):
+                if backup_file.is_file():
+                    file_time = datetime.fromtimestamp(backup_file.stat().st_mtime)
+                    if file_time < cutoff_date:
+                        backup_file.unlink()
+                        removed_count += 1
+        except Exception as e:
+            print(f"Error during backup cleanup: {str(e)}")
+        
+        return removed_count
+
+
+class Config:
+    """Base configuration class with pathlib integration."""
+    
+    def __init__(self):
+        """Initialize configuration with path manager"""
+        self.paths = AppPaths()
+    
+    # Flask settings
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    
+    # Database settings
+    @property
+    def SQLALCHEMY_DATABASE_URI(self):
+        """Database URI using pathlib"""
+        db_url = os.environ.get('DATABASE_URL')
+        if db_url:
+            return db_url
+        return f'sqlite:///{self.paths.database_file}'
+    
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # SSL settings
+    @property
+    def SSL_CERT_PATH(self):
+        return str(self.paths.ssl_cert_file)
+    
+    @property
+    def SSL_KEY_PATH(self):
+        return str(self.paths.ssl_key_file)
+    
+    SSL_ENABLED = os.environ.get('SSL_ENABLED', 'True').lower() == 'true'
+    
+    # Backup settings
+    @property
+    def BACKUP_DIR(self):
+        return str(self.paths.backup_dir)
+    
+    MAX_BACKUP_AGE_DAYS = int(os.environ.get('MAX_BACKUP_AGE_DAYS', '30'))
+    AUTO_BACKUP_ENABLED = os.environ.get('AUTO_BACKUP_ENABLED', 'True').lower() == 'true'
+    BACKUP_SCHEDULE_HOURS = int(os.environ.get('BACKUP_SCHEDULE_HOURS', '24'))
+    
+    # GPG settings
+    @property
+    def GPG_HOME_DIR(self):
+        return str(self.paths.gpg_home_dir)
+    
+    GPG_KEYSERVER = os.environ.get('GPG_KEYSERVER') or 'keyserver.ubuntu.com'
+    GPG_BACKUP_ENABLED = os.environ.get('GPG_BACKUP_ENABLED', 'False').lower() == 'true'
+    GPG_RECIPIENT_EMAIL = os.environ.get('GPG_RECIPIENT_EMAIL')
+    
+    # Logging settings
+    @property
+    def LOG_DIR(self):
+        return str(self.paths.log_dir)
+    
+    LOG_LEVEL = os.environ.get('LOG_LEVEL') or 'INFO'
+    
+    @property
+    def LOG_FILE(self):
+        return str(self.paths.log_file)
+    
+    # Application settings
+    HOST = os.environ.get('HOST') or '127.0.0.1'
+    PORT = int(os.environ.get('PORT', '5000'))
+    DEBUG = False
+    TESTING = False
+    FORCE_HTTPS = os.environ.get('FORCE_HTTPS', 'False').lower() == 'true'
+    
+    # Session settings
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=int(os.environ.get('SESSION_LIFETIME_HOURS', '2')))
+    
+    def init_app(self, app):
+        """Initialize application with configuration."""
+        # Ensure all directories exist
+        self.paths._ensure_directories()
+        
+        # Validate paths
+        validation_results = self.paths.validate_paths()
+        
+        # Log any path validation issues
+        for path_name, is_valid in validation_results.items():
+            if not is_valid and not path_name.endswith('_exists'):
+                print(f"Warning: {path_name} validation failed")
+        
+        # Set Flask configuration
+        app.config.update(self.get_flask_config())
+    
+    def get_flask_config(self) -> Dict[str, Any]:
+        """Get Flask-compatible configuration dictionary"""
+        return {
+            'SECRET_KEY': self.SECRET_KEY,
+            'SQLALCHEMY_DATABASE_URI': self.SQLALCHEMY_DATABASE_URI,
+            'SQLALCHEMY_TRACK_MODIFICATIONS': self.SQLALCHEMY_TRACK_MODIFICATIONS,
+            'PERMANENT_SESSION_LIFETIME': self.PERMANENT_SESSION_LIFETIME,
+            'DEBUG': self.DEBUG,
+            'TESTING': self.TESTING
+        }
+
+
+class DevelopmentConfig(Config):
+    """Development configuration."""
+    DEBUG = True
+    TESTING = False
+    
+    def __init__(self):
+        super().__init__()
+        # Development-specific path overrides if needed
+        # self.paths = AppPaths(Path.cwd() / "dev")
+
+
+class ProductionConfig(Config):
+    """Production configuration."""
+    DEBUG = False
+    TESTING = False
+    
+    # Override with more secure defaults for production
+    SSL_ENABLED = True
+    GPG_BACKUP_ENABLED = True
+    FORCE_HTTPS = True
+    
+    def __init__(self):
+        super().__init__()
+        # Production-specific settings
+        if not os.environ.get('SECRET_KEY'):
+            raise ValueError("SECRET_KEY must be set in production")
+
+
+class TestingConfig(Config):
+    """Testing configuration."""
+    TESTING = True
+    DEBUG = True
+    WTF_CSRF_ENABLED = False
+    
+    def __init__(self):
+        super().__init__()
+        # Use in-memory database for testing
+        self._test_db_uri = 'sqlite:///:memory:'
+    
+    @property
+    def SQLALCHEMY_DATABASE_URI(self):
+        """Use in-memory database for testing"""
+        return self._test_db_uri
+
+
+# Configuration dictionary
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}
+
+
+def get_config(config_name: Optional[str] = None) -> Config:
+    """
+    Get configuration instance
+    
+    Args:
+        config_name: Configuration name ('development', 'production', 'testing')
+                    If None, uses FLASK_ENV environment variable or 'default'
+    
+    Returns:
+        Configuration instance
+    """
+    if config_name is None:
+        config_name = os.environ.get('FLASK_ENV', 'default')
+    
+    config_class = config.get(config_name, config['default'])
+    return config_class()
+
+
+# Global path manager instance for convenience
+app_paths = AppPaths()
+
+
+# Utility functions for backward compatibility
+def init_app(app):
+    """Initialize app with default configuration"""
+    config_instance = get_config()
+    config_instance.init_app(app)
+
+
+def get_backup_dir() -> Path:
+    """Get backup directory path"""
+    return app_paths.backup_dir
+
+
+def get_log_dir() -> Path:
+    """Get log directory path"""
+    return app_paths.log_dir
+
+
+def get_ssl_paths() -> tuple[Path, Path]:
+    """Get SSL certificate and key paths"""
+    return app_paths.ssl_cert_file, app_paths.ssl_key_file
+
+
+if __name__ == "__main__":
+    # Test configuration
+    print("Testing configuration...")
+    
+    config_instance = get_config('development')
+    print(f"Database URI: {config_instance.SQLALCHEMY_DATABASE_URI}")
+    print(f"SSL Cert: {config_instance.SSL_CERT_PATH}")
+    print(f"Backup Dir: {config_instance.BACKUP_DIR}")
+    print(f"Log File: {config_instance.LOG_FILE}")
+    
+    # Test path validation
+    validation = config_instance.paths.validate_paths()
+    print(f"Path validation: {validation}")
+    
+    # Test directory creation
+    print("Directories created successfully!")

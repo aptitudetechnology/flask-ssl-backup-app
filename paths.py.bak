@@ -1,0 +1,32 @@
+# paths.py
+
+from pathlib import Path
+
+class AppPaths:
+    def __init__(self, base_dir=None):
+        self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent
+
+        # Core folders
+        self.backup_dir = self.base_dir / "backups"
+        self.log_dir = self.base_dir / "logs"
+        self.ssl_dir = self.base_dir / "ssl"
+        self.static_dir = self.base_dir / "static"
+        self.templates_dir = self.base_dir / "templates"
+
+        # Core files
+        self.backup_log = self.log_dir / "backup.log"
+        self.app_log = self.log_dir / "app.log"
+        self.database_file = self.base_dir / "customers.db"
+        self.config_file = self.base_dir / "config.ini"
+        self.ssl_cert = self.ssl_dir / "cert.pem"
+        self.ssl_key = self.ssl_dir / "key.pem"
+
+        # Create necessary directories
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.ssl_dir.mkdir(parents=True, exist_ok=True)
+        self.static_dir.mkdir(parents=True, exist_ok=True)
+        self.templates_dir.mkdir(parents=True, exist_ok=True)
+
+        # Used in system health (optional)
+        self.app_root = self.base_dir
