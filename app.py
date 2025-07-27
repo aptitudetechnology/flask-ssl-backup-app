@@ -31,6 +31,16 @@ def create_app(config_name=None):
             return f(*args, **kwargs)
         return decorated_function
 
+    
+    
+    # Initialize Flask app with pathlib paths
+    config = get_config(config_name)
+    
+    app = Flask(__name__,
+               static_folder=str(config.paths.static_dir),
+               template_folder=str(config.paths.templates_dir))
+    
+
     # Customers route (after app and login_required are defined)
     @app.route('/customers')
     @login_required
@@ -44,14 +54,7 @@ def create_app(config_name=None):
             active_only = (status != 'inactive')
             customer_list = CustomerService.get_all_customers(active_only=active_only)
         return render_template('customers.html', customers=customer_list)
-    
-    # Initialize Flask app with pathlib paths
-    config = get_config(config_name)
-    
-    app = Flask(__name__,
-               static_folder=str(config.paths.static_dir),
-               template_folder=str(config.paths.templates_dir))
-    
+
     # Configure Flask app
     app.config.update(config.get_flask_config())
     
