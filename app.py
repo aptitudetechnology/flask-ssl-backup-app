@@ -21,6 +21,15 @@ from blueprints.backup_bp import backup_bp
 # Assuming 'routes.py' now contains 'register_core_routes(app)'
 from routes import register_core_routes
 
+def datetimeformat(value, format='%Y-%m-%d %H:%M'):
+    """Format a datetime for Jinja2 templates."""
+    if value is None:
+        return ''
+    try:
+        return value.strftime(format)
+    except Exception:
+        return str(value)
+
 
 def create_app(config_name=None):
     """Application factory with modern SQLAlchemy and pathlib integration"""
@@ -68,6 +77,10 @@ def create_app(config_name=None):
     app.extensions['backup_manager'] = backup_manager
     app.extensions['gpg_backup'] = gpg_backup
     # app.extensions['db'] = db # You might also store db here if needed, but db.session is usually enough
+
+
+    # Register custom Jinja2 filters
+    app.jinja_env.filters['datetimeformat'] = datetimeformat
 
     # --- NEW: Register blueprints ---
     app.register_blueprint(backup_bp)
