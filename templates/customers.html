@@ -72,7 +72,7 @@
                 <div class="d-flex justify-content-between">
                     <div>
                         <h5 class="card-title">Recent</h5>
-                        <h2 class="mb-0">{{ customers|selectattr('created_at')|select('created_at', 'gt', moment().subtract(30, 'days'))|list|length or 0 }}</h2>
+                        <h2 class="mb-0" id="recentCustomersCount">0</h2>
                     </div>
                     <div class="align-self-center">
                         <i class="bi bi-clock display-4"></i>
@@ -140,7 +140,7 @@
                 </thead>
                 <tbody>
                     {% for customer in customers %}
-                    <tr>
+                    <tr data-created="{{ customer.created_at.isoformat() if customer.created_at else '' }}">
                         <td>
                             <div class="d-flex align-items-center">
                                 <div class="avatar-sm bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
@@ -449,6 +449,26 @@
 {% block scripts %}
 <script>
 let currentCustomerId = null;
+
+// Calculate recent customers (created in last 30 days) using JS
+// This runs after the DOM is loaded
+
+document.addEventListener('DOMContentLoaded', function() {
+    const customers = Array.from(document.querySelectorAll('tr[data-created]'));
+    const now = new Date();
+    const days30 = 1000 * 60 * 60 * 24 * 30;
+    let recentCount = 0;
+    customers.forEach(row => {
+        const created = row.getAttribute('data-created');
+        if (created) {
+            const createdDate = new Date(created);
+            if (now - createdDate < days30) {
+                recentCount++;
+            }
+        }
+    });
+    document.getElementById('recentCustomersCount').textContent = recentCount;
+});
 
 // View customer details
 function viewCustomer(customerId) {
