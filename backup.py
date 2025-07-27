@@ -34,7 +34,8 @@ class DatabaseBackup:
         logger.setLevel(getattr(logging, self.config.LOG_LEVEL))
         
         if not logger.handlers:
-            handler = logging.FileHandler(self.paths.backup_log)
+            handler = logging.FileHandler(self.paths.backup_log_file)
+
             formatter = logging.Formatter(self.config.LOG_FORMAT)
             handler.setFormatter(formatter)
             logger.addHandler(handler)
