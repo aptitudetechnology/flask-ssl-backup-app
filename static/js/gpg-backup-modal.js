@@ -409,6 +409,9 @@ export class GPGBackupModal {
                 this.hide();
             };
         }
+        // Automatically trigger the download
+        window.location.href = downloadUrl;
+        this.hide();
     }
 
     showError(message) {
