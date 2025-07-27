@@ -2,6 +2,18 @@ from flask import Blueprint, render_template, request, jsonify, session, redirec
 from functools import wraps
 from utils.gpg_backup import GPGBackup
 
+
+# Ensure BACKUP_DIR is set in Flask config
+import os
+DEFAULT_BACKUP_DIR = '/tmp/flask-backups'
+if not current_app.config.get('BACKUP_DIR'):
+    # If running outside app context, fallback to env or default
+    os.makedirs(DEFAULT_BACKUP_DIR, exist_ok=True)
+    try:
+        current_app.config['BACKUP_DIR'] = os.environ.get('BACKUP_DIR', DEFAULT_BACKUP_DIR)
+    except Exception:
+        pass
+
 backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
 
 def login_required(f):
@@ -34,25 +46,8 @@ def backup_page():
 def create_backup_route():
     """Create database backup - placeholder"""
     try:
-        # 1. Create the regular backup file (replace with your actual logic)
-        # Import your DatabaseBackup class (adjust import as needed)
-        try:
-            from utils.backup import DatabaseBackup
-        except ImportError:
-            # Fallback: placeholder class if not implemented yet
-            from pathlib import Path
-            class DatabaseBackup:
-                def __init__(self, config):
-                    self.config = config
-                def create_backup(self):
-                    # Create a dummy backup file for demonstration
-                    # Use a safe default if config['paths'] is not available
-                    backup_dir = Path(current_app.config.get('BACKUP_DIR', '/tmp/flask-backups'))
-                    backup_dir.mkdir(parents=True, exist_ok=True)
-                    backup_path = backup_dir / 'dummy-backup.sql'
-                    backup_path.write_text('-- SQL BACKUP DATA --')
-                    return backup_path
-
+        # 1. Create the regular backup file (must use real DatabaseBackup)
+        from utils.backup import DatabaseBackup
         db_backup = DatabaseBackup(current_app.config)
         backup_path = db_backup.create_backup()  # Should return a Path object
 
