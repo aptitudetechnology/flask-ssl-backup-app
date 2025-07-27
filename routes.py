@@ -13,6 +13,13 @@ from config import get_config  # Import configuration
 
 
 def register_routes(app, config, db, backup_manager, gpg_backup):
+    @app.route('/api/customers/<int:customer_id>')
+    @login_required
+    def api_get_customer(customer_id):
+        customer = CustomerService.get_customer_by_id(customer_id)
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        return jsonify(customer.to_dict())
     """Register all routes and error handlers"""
 
     def login_required(f):
