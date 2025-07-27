@@ -6,6 +6,10 @@ from typing import Optional, Dict
 
 
 class AppPaths:
+    @property
+    def temp_dir(self) -> Path:
+        """Temporary directory for backup operations"""
+        return self.backup_dir / "temp"
     """Centralized path management using pathlib"""
 
     def __init__(self, app_root: Optional[Path] = None):
