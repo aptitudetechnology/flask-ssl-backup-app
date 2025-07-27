@@ -134,7 +134,7 @@ def create_backup_route():
                 # The create_encrypted_backup needs the path to the unencrypted file
                 # and the email for encryption
                 encrypted_file_path = gpg_backup.create_encrypted_backup(
-                    input_file_path=backup_file_path, 
+                    input_filepath=backup_file_path, 
                     recipient_email=gpg_email
                 )
                 if encrypted_file_path and encrypted_file_path.exists():
