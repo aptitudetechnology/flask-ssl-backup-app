@@ -21,6 +21,10 @@ from blueprints.backup_bp import backup_bp
 # Assuming 'routes.py' now contains 'register_core_routes(app)'
 from routes import register_core_routes
 
+# --- Import Utility Functions ---
+from utils.gpg_backup import GPGBackup
+
+
 def datetimeformat(value, format='%Y-%m-%d %H:%M'):
     """Format a datetime for Jinja2 templates."""
     if value is None:
