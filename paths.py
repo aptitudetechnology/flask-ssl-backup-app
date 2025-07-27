@@ -19,7 +19,7 @@ class AppPaths:
         # This ensures they are available before _ensure_directories is called
         self._data_dir_path = self.app_root / "data"
         self._log_dir_path = self.app_root / "logs"
-        self._ssl_dir_path = self.app.root / "ssl" # Consistent with other direct app_root paths
+        self._ssl_dir_path = self.app_root / "ssl" # CORRECTED: Changed self.app.root to self.app_root
         
         # Call _ensure_directories to create all necessary folders on initialization
         self._ensure_directories()
