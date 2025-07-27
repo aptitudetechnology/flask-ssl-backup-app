@@ -559,7 +559,7 @@ if __name__ == '__main__':
     # Run the application
     app.run(
         #host=config.HOST,
-        host=0.0.0.0,
+        host='0.0.0.0', 
         port=config.PORT,
         debug=config.DEBUG,
         ssl_context=ssl_context
