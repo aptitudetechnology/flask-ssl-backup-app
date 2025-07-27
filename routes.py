@@ -185,11 +185,13 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
                     flash('Regular backup created, but encryption failed', 'warning')
 
             flash(f'Backup created successfully: {backup_file.name}', 'success')
-            return jsonify({
-                'success': True,
-                'backup_file': str(backup_file),
-                'message': 'Backup created successfully'
-            })
+            # Send the backup file as a download to the browser
+            return send_file(
+                str(backup_file),
+                as_attachment=True,
+                download_name=backup_file.name,
+                mimetype='application/gzip' if backup_file.suffix == '.gz' else 'application/octet-stream'
+            )
 
         except Exception as e:
             app.logger.error(f"Backup creation failed: {str(e)}")
