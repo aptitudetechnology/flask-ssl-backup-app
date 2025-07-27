@@ -41,7 +41,7 @@ def register_core_routes(app): # Removed config, db, backup_manager, gpg_backup 
                     session['user_id'] = user.id
                     session['username'] = user.username
                     flash('Login successful', 'success')
-                    return redirect(url_for('dashboard'))
+                    return redirect(url_for('customers'))
                 else:
                     flash('Invalid credentials', 'error')
             else:
