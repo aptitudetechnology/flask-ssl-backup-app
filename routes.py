@@ -30,7 +30,7 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
     @app.route('/backup')
     @login_required
     def backup_page():
-        return render_template('backup.html')
+        return render_template('backup/index.html')
 
     @app.route('/customers/<int:customer_id>/delete', methods=['POST'])
     @login_required
