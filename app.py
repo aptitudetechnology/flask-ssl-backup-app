@@ -121,5 +121,6 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=config.PORT,
         debug=config.DEBUG,
-        ssl_context=ssl_context
+        ssl_context=ssl_context,
+        threaded=True
     )
