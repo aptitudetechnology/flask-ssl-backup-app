@@ -22,9 +22,9 @@ python-dateutil==2.8.2
 pytz==2023.3
 six==1.16.0
 
-# SQLite Backup Tools (choose one or both)
+# SQLite Backup Tools
 sqlite-utils==3.36           # CLI and Python API for SQLite operations
-flask-alchemydumps==0.0.11   # Flask-specific SQLAlchemy backup tool
+# Note: flask-alchemydumps is incompatible with Flask 2.x, use built-in sqlite3.backup() instead
 
 # Development & Code Quality
 ruff==0.12.4
