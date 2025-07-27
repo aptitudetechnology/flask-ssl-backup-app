@@ -16,7 +16,7 @@ class AppPaths:
         # or how __file__ resolves in other modules.
         self.app_root = Path(__file__).parent 
         
-         print(f"DEBUG: AppPaths initialized. Application Root: {self.app_root}")
+        print(f"DEBUG: AppPaths initialized. Application Root: {self.app_root}")
 
         # Initialize internal variables for directories that are properties
         self._data_dir_path = self.app_root / "data"
