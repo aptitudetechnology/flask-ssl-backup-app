@@ -1,23 +1,20 @@
-🔄 Full Minimal Fix (Top of your File):
-
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, current_app
 from functools import wraps
 from utils.gpg_backup import GPGBackup
 
+
+# Ensure BACKUP_DIR is set in Flask config
+import os
+DEFAULT_BACKUP_DIR = '/tmp/flask-backups'
+if not current_app.config.get('BACKUP_DIR'):
+    # If running outside app context, fallback to env or default
+    os.makedirs(DEFAULT_BACKUP_DIR, exist_ok=True)
+    try:
+        current_app.config['BACKUP_DIR'] = os.environ.get('BACKUP_DIR', DEFAULT_BACKUP_DIR)
+    except Exception:
+        pass
+
 backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
-
-@backup_bp.before_app_first_request
-def ensure_backup_dir_configured():
-    import os
-    DEFAULT_BACKUP_DIR = '/tmp/flask-backups'
-    config = current_app.config
-
-    if not config.get('BACKUP_DIR'):
-        backup_dir = os.environ.get('BACKUP_DIR', DEFAULT_BACKUP_DIR)
-        os.makedirs(backup_dir, exist_ok=True)
-        config['BACKUP_DIR'] = backup_dir
-
-
 
 def login_required(f):
     @wraps(f)
