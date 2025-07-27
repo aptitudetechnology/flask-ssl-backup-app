@@ -29,6 +29,8 @@ sqlite-utils==3.36           # CLI and Python API for SQLite operations
 # Development & Code Quality
 ruff==0.12.4
 
+python-gnupg==0.5.5.dev0
+
 # Optional: Enhanced backup functionality
 # python-dotenv==1.0.0       # For environment variable management
 # psutil==5.9.5               # For system monitoring during backups
