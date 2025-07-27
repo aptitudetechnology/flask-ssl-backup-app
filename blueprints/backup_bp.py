@@ -4,7 +4,7 @@ from utils.gpg_backup import GPGBackup
 
 backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
 
-@backup_bp.before_app_first_request
+@backup_bp.before_app_request
 def ensure_backup_dir_configured():
     import os
     DEFAULT_BACKUP_DIR = '/tmp/flask-backups'
