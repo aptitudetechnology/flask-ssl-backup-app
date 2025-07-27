@@ -1,0 +1,103 @@
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, send_file, current_app
+from models import db, User, BackupRecord, CustomerService
+from backup import DatabaseBackup
+from backup_gpg import GPGBackup
+from config import get_config
+
+from functools import wraps
+
+routes = Blueprint('routes', __name__)
+
+# Authentication decorator (can also move to utils)
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('routes.login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# You will need to access config and backup_manager, gpg_backup from app context:
+def get_config_obj():
+    return current_app.config['APP_CONFIG']
+
+def get_backup_manager():
+    return current_app.config['BACKUP_MANAGER']
+
+def get_gpg_backup():
+    return current_app.config.get('GPG_BACKUP', None)
+
+
+@routes.route('/')
+def index():
+    return render_template('base.html')
+
+@routes.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        if username and password:
+            user = User.query.filter_by(username=username).first()
+            if user and user.check_password(password):
+                session['user_id'] = user.id
+                session['username'] = user.username
+                flash('Login successful', 'success')
+                return redirect(url_for('routes.dashboard'))
+            else:
+                flash('Invalid credentials', 'error')
+        else:
+            flash('Please provide username and password', 'error')
+
+    return render_template('login.html')
+
+@routes.route('/logout')
+def logout():
+    session.clear()
+    flash('Logged out successfully', 'info')
+    return redirect(url_for('routes.index'))
+
+@routes.route('/dashboard')
+@login_required
+def dashboard():
+    try:
+        backup_manager = get_backup_manager()
+        config = get_config_obj()
+        backup_stats = backup_manager.get_backup_stats()
+        recent_backups = backup_manager.list_backups()[:5]
+        db_info = None  # you can implement helper here or import it
+        health_status = None  # same here
+        
+        return render_template('dashboard.html',
+                               backup_stats=backup_stats,
+                               recent_backups=recent_backups,
+                               db_info=db_info,
+                               health_status=health_status)
+    except Exception as e:
+        current_app.logger.error(f"Dashboard error: {str(e)}")
+        flash('Error loading dashboard', 'error')
+        return render_template('dashboard.html',
+                               backup_stats={},
+                               recent_backups=[],
+                               db_info={},
+                               health_status={})
+
+# ... Add other routes here, converted to use `routes` blueprint
+
+# Example: Customers route
+@routes.route('/customers')
+@login_required
+def customers():
+    config = get_config_obj()
+    search = request.args.get('search', '')
+    status = request.args.get('status', '')
+    if search:
+        customer_list = CustomerService.search_customers(search)
+    else:
+        active_only = (status != 'inactive')
+        customer_list = CustomerService.get_all_customers(active_only=active_only)
+    return render_template('customers.html', customers=customer_list)
+
+# Similarly add your /backup/create, /backup/list, etc. routes here
+
