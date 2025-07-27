@@ -4,6 +4,7 @@ import gnupg
 import logging
 from pathlib import Path
 import os
+from typing import Optional
 
 class GPGBackup:
     def __init__(self, config):
