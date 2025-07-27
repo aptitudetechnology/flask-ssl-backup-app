@@ -113,7 +113,8 @@ class AppPaths:
         files = {
             'ssl_cert': self.ssl_cert_file,
             'ssl_key': self.ssl_key_file,
-            'database': self.database_file
+            'database': self.database_file,
+            'gpg_log_file': self.gpg_log_fil
         }
         results.update({f"{k}_exists": v.exists() for k, v in files.items()})
         return results
