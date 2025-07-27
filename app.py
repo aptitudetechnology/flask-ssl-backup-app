@@ -15,12 +15,25 @@ import tempfile
 import json
 
 from config import get_config, app_paths
-from models import db, User, BackupRecord  # Updated import - removed init_db, added db
+from models import db, User, BackupRecord, CustomerService  # Added CustomerService for customers view
 from backup import DatabaseBackup, create_backup, list_available_backups
 from backup_gpg import GPGBackup
 
 
 def create_app(config_name=None):
+    @app.route('/customers')
+    @login_required
+    def customers():
+        """Customer list page"""
+        # Optionally implement search/filter logic here
+        search = request.args.get('search', '')
+        status = request.args.get('status', '')
+        if search:
+            customer_list = CustomerService.search_customers(search)
+        else:
+            active_only = (status != 'inactive')
+            customer_list = CustomerService.get_all_customers(active_only=active_only)
+        return render_template('customers.html', customers=customer_list)
     """Application factory with modern SQLAlchemy and pathlib integration"""
     
     # Initialize Flask app with pathlib paths
