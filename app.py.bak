@@ -1,6 +1,6 @@
 """
-Flask Application with Pathlib Integration
-Main application with SSL, database, and backup functionality
+Flask Application with Modern SQLAlchemy Integration
+Updated to use modern Flask-SQLAlchemy patterns with pathlib
 """
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_file
@@ -15,13 +15,26 @@ import tempfile
 import json
 
 from config import get_config, app_paths
-from models import init_db, User, BackupRecord
+from models import db, User, BackupRecord, CustomerService  # Added CustomerService for customers view
 from backup import DatabaseBackup, create_backup, list_available_backups
 from backup_gpg import GPGBackup
 
 
 def create_app(config_name=None):
-    """Application factory with pathlib integration"""
+    @app.route('/customers')
+    @login_required
+    def customers():
+        """Customer list page"""
+        # Optionally implement search/filter logic here
+        search = request.args.get('search', '')
+        status = request.args.get('status', '')
+        if search:
+            customer_list = CustomerService.search_customers(search)
+        else:
+            active_only = (status != 'inactive')
+            customer_list = CustomerService.get_all_customers(active_only=active_only)
+        return render_template('customers.html', customers=customer_list)
+    """Application factory with modern SQLAlchemy and pathlib integration"""
     
     # Initialize Flask app with pathlib paths
     config = get_config(config_name)
@@ -33,11 +46,20 @@ def create_app(config_name=None):
     # Configure Flask app
     app.config.update(config.get_flask_config())
     
+    # Modern SQLAlchemy configuration
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{config.paths.database_file}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
     # Setup logging
     setup_logging(app, config)
     
-    # Initialize database
-    init_db(str(config.paths.database_file))
+    # Initialize database with modern pattern
+    db.init_app(app)
+    
+    # Create tables within app context
+    with app.app_context():
+        db.create_all()
+        app.logger.info(f"Database initialized at: {config.paths.database_file}")
     
     # Setup security headers
     setup_security_headers(app, config)
@@ -59,18 +81,19 @@ def create_app(config_name=None):
     @app.route('/')
     def index():
         """Home page"""
-        return render_template('index.html')
+        return render_template('base.html')
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():
-        """User login"""
+        """User login with modern SQLAlchemy"""
         if request.method == 'POST':
             username = request.form.get('username')
             password = request.form.get('password')
             
             if username and password:
-                user = User.authenticate(username, password)
-                if user:
+                # Modern SQLAlchemy query pattern
+                user = User.query.filter_by(username=username).first()
+                if user and user.check_password(password):  # Assuming you have this method
                     session['user_id'] = user.id
                     session['username'] = user.username
                     flash('Login successful', 'success')
@@ -121,13 +144,25 @@ def create_app(config_name=None):
         try:
             backup_type = request.form.get('backup_type', 'regular')
             description = request.form.get('description', '')
+            user_id = session.get('user_id')
             
             # Create backup
             backup_file = backup_manager.create_backup(
                 backup_type=backup_type,
                 description=description,
-                user_id=session.get('user_id')
+                user_id=user_id
             )
+            
+            # Create backup record in database using modern SQLAlchemy
+            backup_record = BackupRecord(
+                filename=backup_file.name,
+                backup_type=backup_type,
+                description=description,
+                user_id=user_id,
+                file_size=backup_file.stat().st_size if backup_file.exists() else 0
+            )
+            db.session.add(backup_record)
+            db.session.commit()
             
             # Create GPG backup if configured
             if gpg_backup and backup_type in ['encrypted', 'both']:
@@ -147,6 +182,7 @@ def create_app(config_name=None):
             
         except Exception as e:
             app.logger.error(f"Backup creation failed: {str(e)}")
+            db.session.rollback()  # Rollback on error
             flash('Backup creation failed', 'error')
             return jsonify({
                 'success': False,
@@ -156,20 +192,23 @@ def create_app(config_name=None):
     @app.route('/backup/list')
     @login_required
     def list_backups():
-        """List available backups"""
+        """List available backups with database records"""
         try:
-            backups = backup_manager.list_backups()
+            # Get backup records from database
+            backup_records = BackupRecord.query.order_by(BackupRecord.created_at.desc()).all()
             backup_data = []
             
-            for backup_path in backups:
+            for record in backup_records:
+                backup_path = config.paths.backup_dir / record.filename
                 backup_info = {
-                    'filename': backup_path.name,
+                    'id': record.id,
+                    'filename': record.filename,
                     'path': str(backup_path),
-                    'size': backup_path.stat().st_size if backup_path.exists() else 0,
-                    'created': datetime.fromtimestamp(
-                        backup_path.stat().st_mtime
-                    ).isoformat() if backup_path.exists() else None,
-                    'type': 'encrypted' if backup_path.suffix == '.gpg' else 'regular'
+                    'size': backup_path.stat().st_size if backup_path.exists() else record.file_size,
+                    'created': record.created_at.isoformat(),
+                    'type': record.backup_type,
+                    'description': record.description,
+                    'exists': backup_path.exists()
                 }
                 backup_data.append(backup_info)
             
@@ -190,6 +229,12 @@ def create_app(config_name=None):
     def download_backup(backup_name):
         """Download backup file"""
         try:
+            # Validate backup exists in database
+            backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
+            if not backup_record:
+                flash('Backup record not found', 'error')
+                return redirect(url_for('dashboard'))
+            
             # Validate backup name and path
             backup_path = config.paths.backup_dir / backup_name
             
@@ -222,6 +267,11 @@ def create_app(config_name=None):
             if not backup_name:
                 return jsonify({'success': False, 'error': 'No backup specified'}), 400
             
+            # Validate backup exists in database
+            backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
+            if not backup_record:
+                return jsonify({'success': False, 'error': 'Backup record not found'}), 404
+            
             backup_path = config.paths.backup_dir / backup_name
             
             # Security validation
@@ -242,6 +292,10 @@ def create_app(config_name=None):
             success = backup_manager.restore_backup(backup_path)
             
             if success:
+                # After successful restore, recreate tables to ensure schema is up to date
+                with app.app_context():
+                    db.create_all()
+                
                 flash(f'Database restored from {backup_name}', 'success')
                 return jsonify({
                     'success': True,
@@ -264,26 +318,35 @@ def create_app(config_name=None):
     @app.route('/backup/delete/<backup_name>', methods=['DELETE'])
     @login_required
     def delete_backup(backup_name):
-        """Delete backup file"""
+        """Delete backup file and database record"""
         try:
+            # Find backup record
+            backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
+            
             backup_path = config.paths.backup_dir / backup_name
             
             # Security validation
             if not str(backup_path.resolve()).startswith(str(config.paths.backup_dir.resolve())):
                 return jsonify({'success': False, 'error': 'Invalid backup file'}), 400
             
+            # Delete file if it exists
             if backup_path.exists():
                 backup_path.unlink()
-                flash(f'Backup {backup_name} deleted', 'success')
-                return jsonify({
-                    'success': True,
-                    'message': f'Backup {backup_name} deleted'
-                })
-            else:
-                return jsonify({'success': False, 'error': 'Backup file not found'}), 404
+            
+            # Delete database record if it exists
+            if backup_record:
+                db.session.delete(backup_record)
+                db.session.commit()
+            
+            flash(f'Backup {backup_name} deleted', 'success')
+            return jsonify({
+                'success': True,
+                'message': f'Backup {backup_name} deleted'
+            })
                 
         except Exception as e:
             app.logger.error(f"Backup deletion failed: {str(e)}")
+            db.session.rollback()
             return jsonify({
                 'success': False,
                 'error': str(e)
@@ -329,6 +392,8 @@ def create_app(config_name=None):
     @app.errorhandler(500)
     def internal_error(error):
         app.logger.error(f"Internal error: {str(error)}")
+        # Rollback database session on server error
+        db.session.rollback()
         return render_template('errors/500.html'), 500
     
     @app.errorhandler(403)
@@ -506,7 +571,8 @@ if __name__ == '__main__':
     
     # Run the application
     app.run(
-        host=config.HOST,
+        #host=config.HOST,
+        host='0.0.0.0', 
         port=config.PORT,
         debug=config.DEBUG,
         ssl_context=ssl_context

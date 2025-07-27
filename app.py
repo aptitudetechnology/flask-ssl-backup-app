@@ -21,11 +21,21 @@ from backup_gpg import GPGBackup
 
 
 def create_app(config_name=None):
+    """Application factory with modern SQLAlchemy and pathlib integration"""
+    # Authentication decorator
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    # Customers route (after app and login_required are defined)
     @app.route('/customers')
     @login_required
     def customers():
         """Customer list page"""
-        # Optionally implement search/filter logic here
         search = request.args.get('search', '')
         status = request.args.get('status', '')
         if search:
@@ -34,7 +44,6 @@ def create_app(config_name=None):
             active_only = (status != 'inactive')
             customer_list = CustomerService.get_all_customers(active_only=active_only)
         return render_template('customers.html', customers=customer_list)
-    """Application factory with modern SQLAlchemy and pathlib integration"""
     
     # Initialize Flask app with pathlib paths
     config = get_config(config_name)
