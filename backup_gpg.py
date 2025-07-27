@@ -6,6 +6,42 @@ from pathlib import Path
 import os
 from typing import Optional
 
+
+# backup_gpg.py
+
+import gnupg
+import logging
+from pathlib import Path
+import os
+from typing import Optional
+
+# --- ADD THESE DEBUG PRINTS HERE ---
+import inspect
+print(f"DEBUG: gnupg module loaded from: {gnupg.__file__}")
+print(f"DEBUG: gnupg version (from __version__ attribute): {getattr(gnupg, '__version__', 'Version attribute not found')}")
+try:
+    # Attempt to get the signature of the GPG constructor to see its accepted arguments
+    sig = inspect.signature(gnupg.GPG.__init__)
+    print(f"DEBUG: gnupg.GPG.__init__ signature: {sig}")
+except Exception as e:
+    print(f"DEBUG: Could not inspect gnupg.GPG.__init__ signature: {e}")
+# --- END DEBUG PRINTS ---
+
+class GPGBackup:
+    def __init__(self, config):
+        self.config = config
+        self.gpg_home_dir = config.paths.gpg_home_dir
+        self.gnupg_bin_path = config.GPG_BINARY_PATH
+        self.gpg = self._initialize_gpg()
+        self.logger = self._setup_logging()
+
+    def _initialize_gpg(self):
+        self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
+        # This is the line that's causing the TypeError
+        return gnupg.GPG(gnupghome=str(self.gpg_home_dir), binary=self.gnupg_bin_path)
+
+    # ... rest of the class ...
+
 class GPGBackup:
     def __init__(self, config):
         self.config = config
