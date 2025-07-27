@@ -102,7 +102,17 @@ class Config:
             'SQLALCHEMY_TRACK_MODIFICATIONS': self.SQLALCHEMY_TRACK_MODIFICATIONS,
             'PERMANENT_SESSION_LIFETIME': self.PERMANENT_SESSION_LIFETIME,
             'DEBUG': self.DEBUG,
-            'TESTING': self.TESTING
+            'TESTING': self.TESTING,
+            # --- ADD THIS LINE ---
+            'SSL_ENABLED': self.SSL_ENABLED,
+            # --- Also add other relevant config if you want app.config to have them ---
+            'HOST': self.HOST,
+            'PORT': self.PORT,
+            'FORCE_HTTPS': self.FORCE_HTTPS,
+            'GPG_BINARY_PATH': getattr(self, 'GPG_BINARY_PATH', None), # For DevelopmentConfig specific
+            'GPG_KEYSERVER': self.GPG_KEYSERVER,
+            'LOG_LEVEL': self.LOG_LEVEL,
+            'APP_PATHS': self.paths # Crucial for app.py to get paths from app.config
         }
 
 
