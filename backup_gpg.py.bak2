@@ -53,7 +53,7 @@ class GPGBackup:
     def _initialize_gpg(self):
         # Ensure the GPG home directory exists
         self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
-        return gnupg.GPG(gnupghome=str(self.gpg_home_dir), gpgbinary=self.gnupg_bin_path)
+        return gnupg.GPG(gnupghome=str(self.gpg_home_dir), binary=self.gnupg_bin_path)
 
     def _setup_logging(self):
         # Setup specific logger for GPG operations
