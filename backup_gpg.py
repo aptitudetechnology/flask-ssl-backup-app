@@ -31,6 +31,38 @@ class GPGBackup:
             logger.addHandler(logging.StreamHandler()) # Also log to console
         return logger
 
+    def search_keys(self, email: str) -> list:
+        """
+        Searches for public keys on a keyserver and returns key information.
+        Returns a list of key dictionaries with 'key_id', 'uids', 'created' etc.
+        """
+        try:
+            self.logger.info(f"Searching for GPG keys for email: {email} on keyserver: {self.config.GPG_KEYSERVER}")
+            search_result = self.gpg.search_keys(email, keyserver=self.config.GPG_KEYSERVER)
+
+            if search_result:
+                keys = []
+                for key in search_result:
+                    key_info = {
+                        'key_id': key.get('keyid', 'Unknown'),
+                        'uids': key.get('uids', []),
+                        'created': key.get('date', 'Unknown'),
+                        'length': key.get('length', 'Unknown'),
+                        'algo': key.get('algo', 'Unknown')
+                    }
+                    if 'fingerprint' in key:
+                        key_info['fingerprint'] = key['fingerprint']
+                    keys.append(key_info)
+                
+                self.logger.info(f"Found {len(keys)} key(s) for {email}")
+                return keys
+            else:
+                self.logger.warning(f"No keys found for {email} on keyserver {self.config.GPG_KEYSERVER}")
+                return []
+        except Exception as e:
+            self.logger.error(f"Error searching GPG keys: {e}")
+            return []
+
     def create_encrypted_backup(self, input_filepath: Path, recipient_email: str) -> Optional[Path]:
         """
         Encrypts the given file using the recipient's public GPG key.
@@ -84,7 +116,7 @@ class GPGBackup:
                     key_info = imported_key.get('fingerprint', imported_key.get('keyid', 'Unknown'))
                     self.logger.info(f"Key imported: {key_info}")
                 else:
-                    self.logger.warning(f"Failed to import key for {recipient_email}: {import_result.stderr or import_result.status}")
+                    self.logger.warning(f"Failed to import key for {recipient_email}: {getattr(import_result, 'stderr', 'No error details')}")
                     return None
             else:
                 self.logger.warning(f"No public GPG key found for {recipient_email} on keyserver: {self.config.GPG_KEYSERVER}")
@@ -118,7 +150,7 @@ class GPGBackup:
                 self.logger.info(f"Successfully imported {import_result.count} key(s) from {key_filepath}")
                 return True
             else:
-                self.logger.warning(f"No keys imported from {key_filepath}: {import_result.stderr}")
+                self.logger.warning(f"No keys imported from {key_filepath}: {getattr(import_result, 'stderr', 'No error details')}")
                 return False
         except Exception as e:
             self.logger.error(f"Error importing key from file {key_filepath}: {e}")
@@ -149,7 +181,7 @@ class GPGBackup:
                         self.logger.info(f"Successfully imported {import_result.count} key(s).")
                         return True
                     else:
-                        self.logger.warning(f"Failed to import keys: {import_result.stderr}")
+                        self.logger.warning(f"Failed to import keys: {getattr(import_result, 'stderr', 'No error details')}")
                         return False
                 else:
                     self.logger.warning(f"No valid identifiers found for keys: {search_result}")
