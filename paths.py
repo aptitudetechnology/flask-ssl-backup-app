@@ -106,7 +106,8 @@ class AppPaths:
             'log_dir': self.log_dir,
             'ssl_dir': self.ssl_dir,
             'static_dir': self.static_dir,
-            'templates_dir': self.templates_dir
+            'templates_dir': self.templates_dir,
+            'gpg_home_dir_exists': self.gpg_home_dir.is_dir() 
         }
         results = {k: v.exists() and v.is_dir() for k, v in dirs.items()}
         files = {
