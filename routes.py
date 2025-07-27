@@ -150,15 +150,13 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
     def create_backup_route():
         """Create database backup"""
         try:
+            # Only supported args for create_backup
+            backup_file = backup_manager.create_backup()
+
+            # Get extra info for BackupRecord
             backup_type = request.form.get('backup_type', 'regular')
             description = request.form.get('description', '')
             user_id = session.get('user_id')
-
-            backup_file = backup_manager.create_backup(
-                backup_type=backup_type,
-                description=description,
-                user_id=user_id
-            )
 
             backup_record = BackupRecord(
                 filename=backup_file.name,
