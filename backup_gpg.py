@@ -6,28 +6,17 @@ from pathlib import Path
 import os
 from typing import Optional
 
-# You can remove these debug prints now if you want, or leave them for now
-# import inspect
-# print(f"DEBUG: gnupg module loaded from: {gnupg.__file__}")
-# print(f"DEBUG: gnupg version (from __version__ attribute): {getattr(gnupg, '__version__', 'Version attribute not found')}")
-# try:
-#     sig = inspect.signature(gnupg.GPG.__init__)
-#     print(f"DEBUG: gnupg.GPG.__init__ signature: {sig}")
-# except Exception as e:
-#     print(f"DEBUG: Could not inspect gnupg.GPG.__init__ signature: {e}")
-
 class GPGBackup:
     def __init__(self, config):
         self.config = config
         self.gpg_home_dir = config.paths.gpg_home_dir
-        self.gnupg_bin_path = config.GPG_BINARY_PATH # This is now uncommented in config.py
+        self.gnupg_bin_path = config.GPG_BINARY_PATH
         self.gpg = self._initialize_gpg()
         self.logger = self._setup_logging()
 
     def _initialize_gpg(self):
         # Ensure the GPG home directory exists
         self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
-        # THIS IS THE ONLY CHANGE NEEDED HERE: 'binary' changed to 'gpgbinary'
         return gnupg.GPG(gnupghome=str(self.gpg_home_dir), gpgbinary=self.gnupg_bin_path)
 
     def _setup_logging(self):
@@ -67,25 +56,33 @@ class GPGBackup:
             self.logger.debug(f"DEBUG: GPG search_keys result: {search_result}")
 
             if search_result:
-                fingerprints = []
+                # Try to get fingerprints first, but fall back to keyids if fingerprints aren't available
+                identifiers = []
                 for key in search_result:
-                    if 'fingerprint' in key:
-                        fingerprints.append(key['fingerprint'])
+                    if 'fingerprint' in key and key['fingerprint']:
+                        identifiers.append(key['fingerprint'])
+                        self.logger.info(f"Found key with fingerprint: {key['fingerprint']}")
+                    elif 'keyid' in key and key['keyid']:
+                        identifiers.append(key['keyid'])
+                        self.logger.info(f"Found key with keyid (no fingerprint): {key['keyid']}")
                     else:
-                        self.logger.warning(f"Skipping key found without 'fingerprint': {key}")
+                        self.logger.warning(f"Skipping key with no usable identifier: {key}")
                 
-                if not fingerprints: # If no valid fingerprints were found
-                    self.logger.warning(f"No valid GPG fingerprints found for {recipient_email} despite search results.")
+                if not identifiers:
+                    self.logger.warning(f"No valid GPG identifiers found for {recipient_email} despite search results.")
                     return None
-                self.logger.info(f"Found keys: {fingerprints}. Importing first key.")
-                import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, *fingerprints[:1]) # Import only the first found key
+                
+                self.logger.info(f"Found keys: {identifiers}. Importing first key.")
+                import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, identifiers[0])
                 
                 self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
                 self.logger.debug(f"DEBUG: GPG recv_keys status: {import_result.status}")
                 self.logger.debug(f"DEBUG: GPG recv_keys stderr: {import_result.stderr}")
                 
                 if import_result.results:
-                    self.logger.info(f"Key imported: {import_result.results[0].get('fingerprint', 'N/A')}")
+                    imported_key = import_result.results[0]
+                    key_info = imported_key.get('fingerprint', imported_key.get('keyid', 'Unknown'))
+                    self.logger.info(f"Key imported: {key_info}")
                 else:
                     self.logger.warning(f"Failed to import key for {recipient_email}: {import_result.stderr or import_result.status}")
                     return None
@@ -136,15 +133,26 @@ class GPGBackup:
             search_result = self.gpg.search_keys(email, keyserver=self.config.GPG_KEYSERVER)
 
             if search_result:
-                fingerprints = [key['fingerprint'] for key in search_result]
-                self.logger.info(f"Found {len(fingerprints)} key(s) for {email}. Importing...")
-                import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, *fingerprints)
+                # Use the same logic as in create_encrypted_backup
+                identifiers = []
+                for key in search_result:
+                    if 'fingerprint' in key and key['fingerprint']:
+                        identifiers.append(key['fingerprint'])
+                    elif 'keyid' in key and key['keyid']:
+                        identifiers.append(key['keyid'])
+                
+                if identifiers:
+                    self.logger.info(f"Found {len(identifiers)} key(s) for {email}. Importing...")
+                    import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, *identifiers)
 
-                if import_result.results:
-                    self.logger.info(f"Successfully imported {import_result.count} key(s).")
-                    return True
+                    if import_result.results:
+                        self.logger.info(f"Successfully imported {import_result.count} key(s).")
+                        return True
+                    else:
+                        self.logger.warning(f"Failed to import keys: {import_result.stderr}")
+                        return False
                 else:
-                    self.logger.warning(f"Failed to import keys: {import_result.stderr}")
+                    self.logger.warning(f"No valid identifiers found for keys: {search_result}")
                     return False
             else:
                 self.logger.warning(f"No keys found for {email} on keyserver {self.config.GPG_KEYSERVER}")
