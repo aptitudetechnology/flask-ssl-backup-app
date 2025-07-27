@@ -13,6 +13,15 @@ from config import get_config  # Import configuration
 
 
 def register_routes(app, config, db, backup_manager, gpg_backup):
+
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
     @app.route('/customers/<int:customer_id>/delete', methods=['POST'])
     @login_required
     def delete_customer(customer_id):
@@ -22,14 +31,6 @@ def register_routes(app, config, db, backup_manager, gpg_backup):
         else:
             flash('Customer not found.', 'danger')
         return redirect(url_for('customers'))
-
-    def login_required(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                return redirect(url_for('login'))
-            return f(*args, **kwargs)
-        return decorated_function
 
     @app.route('/api/customers/<int:customer_id>')
     @login_required
