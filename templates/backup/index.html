@@ -291,20 +291,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     window.URL.revokeObjectURL(url);
                     a.remove();
                 }, 100);
-                alert('Backup created and download started.');
+                // Optionally show a toast or notification here, but do NOT show error alert
+                // alert('Backup created and download started.');
+                return; // Prevent further error handling
+            }
+            // Try to parse JSON error
+            let data;
+            try {
+                data = await response.json();
+            } catch (e) {
+                data = null;
+            }
+            if (data && data.error) {
+                alert('Backup failed: ' + data.error);
             } else {
-                // Try to parse JSON error
-                let data;
-                try {
-                    data = await response.json();
-                } catch (e) {
-                    data = null;
-                }
-                if (data && data.error) {
-                    alert('Backup failed: ' + data.error);
-                } else {
-                    alert('Backup failed: ' + (response.statusText || 'Unknown error'));
-                }
+                alert('Backup failed: ' + (response.statusText || 'Unknown error'));
             }
         })
         .catch(err => {
