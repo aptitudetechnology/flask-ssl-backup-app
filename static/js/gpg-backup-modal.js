@@ -1,13 +1,3 @@
-Okay, here is the updated `gpg-backup-modal.js` file.
-
-I've made two key changes:
-
-1.  **Modified `searchGPGKeys`:** It now reliably fetches the email from the `gpgModalEmail` hidden input within the modal if no email is explicitly passed to it. This input is populated by the main form's email.
-2.  **Modified `GPGBackupModal.show()`:** After showing the "key setup" step, it now automatically calls `searchGPGKeys()` using the email that was just set.
-
-<!-- end list -->
-
-```javascript
 // gpg-backup-modal.js - Enhanced Version
 
 // Variable to store the ID of the selected GPG key
@@ -499,4 +489,3 @@ export class GPGBackupModal {
 window.selectGPGKey = selectGPGKey;
 window.searchGPGKeys = searchGPGKeys;
 window.importSelectedGPGKey = importSelectedGPGKey; // Ensure this is also globally available
-```
