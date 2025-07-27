@@ -1,12 +1,3 @@
-# backup_gpg.py.
-
-import gnupg
-import logging
-from pathlib import Path
-import os
-from typing import Optional
-
-
 # backup_gpg.py
 
 import gnupg
@@ -15,44 +6,28 @@ from pathlib import Path
 import os
 from typing import Optional
 
-# --- ADD THESE DEBUG PRINTS HERE ---
-import inspect
-print(f"DEBUG: gnupg module loaded from: {gnupg.__file__}")
-print(f"DEBUG: gnupg version (from __version__ attribute): {getattr(gnupg, '__version__', 'Version attribute not found')}")
-try:
-    # Attempt to get the signature of the GPG constructor to see its accepted arguments
-    sig = inspect.signature(gnupg.GPG.__init__)
-    print(f"DEBUG: gnupg.GPG.__init__ signature: {sig}")
-except Exception as e:
-    print(f"DEBUG: Could not inspect gnupg.GPG.__init__ signature: {e}")
-# --- END DEBUG PRINTS ---
+# You can remove these debug prints now if you want, or leave them for now
+# import inspect
+# print(f"DEBUG: gnupg module loaded from: {gnupg.__file__}")
+# print(f"DEBUG: gnupg version (from __version__ attribute): {getattr(gnupg, '__version__', 'Version attribute not found')}")
+# try:
+#     sig = inspect.signature(gnupg.GPG.__init__)
+#     print(f"DEBUG: gnupg.GPG.__init__ signature: {sig}")
+# except Exception as e:
+#     print(f"DEBUG: Could not inspect gnupg.GPG.__init__ signature: {e}")
 
 class GPGBackup:
     def __init__(self, config):
         self.config = config
         self.gpg_home_dir = config.paths.gpg_home_dir
-        self.gnupg_bin_path = config.GPG_BINARY_PATH
-        self.gpg = self._initialize_gpg()
-        self.logger = self._setup_logging()
-
-    def _initialize_gpg(self):
-        self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
-        # This is the line that's causing the TypeError
-        return gnupg.GPG(gnupghome=str(self.gpg_home_dir), binary=self.gnupg_bin_path)
-
-    # ... rest of the class ...
-
-class GPGBackup:
-    def __init__(self, config):
-        self.config = config
-        self.gpg_home_dir = config.paths.gpg_home_dir
-        self.gnupg_bin_path = config.GPG_BINARY_PATH # Make sure this is correctly set in your config.py
+        self.gnupg_bin_path = config.GPG_BINARY_PATH # This is now uncommented in config.py
         self.gpg = self._initialize_gpg()
         self.logger = self._setup_logging()
 
     def _initialize_gpg(self):
         # Ensure the GPG home directory exists
         self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
+        # THIS IS THE ONLY CHANGE NEEDED HERE: 'binary' changed to 'gpgbinary'
         return gnupg.GPG(gnupghome=str(self.gpg_home_dir), gpgbinary=self.gnupg_bin_path)
 
     def _setup_logging(self):
@@ -67,7 +42,7 @@ class GPGBackup:
             logger.addHandler(logging.StreamHandler()) # Also log to console
         return logger
 
-    def create_encrypted_backup(self, input_filepath: Path, recipient_email: str) -> Optional[Path]: # Add this method
+    def create_encrypted_backup(self, input_filepath: Path, recipient_email: str) -> Optional[Path]:
         """
         Encrypts the given file using the recipient's public GPG key.
         Returns the path to the encrypted file or None on failure.
@@ -115,8 +90,6 @@ class GPGBackup:
             self.logger.error(f"An unexpected error occurred during GPG encryption: {e}")
             return None
 
-    # You might also have methods like 'decrypt_backup' or 'import_key' here
-    # Example for importing key from file
     def import_key_from_file(self, key_filepath: Path) -> bool:
         """
         Imports a public GPG key from a file.
@@ -137,7 +110,6 @@ class GPGBackup:
             self.logger.error(f"Error importing key from file {key_filepath}: {e}")
             return False
 
-    # Example for searching and importing a key from a keyserver
     def search_and_import_key(self, email: str) -> bool:
         """
         Searches for a public key on a keyserver and imports it.
