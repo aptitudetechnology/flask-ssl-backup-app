@@ -10,7 +10,7 @@ blinker==1.6.2
 
 # Database
 SQLAlchemy==2.0.21
-greenlet==2.0.2
+# greenlet version managed by SQLAlchemy
 
 # Security & Encryption
 python-gnupg==0.5.0
