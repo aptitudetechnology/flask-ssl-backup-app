@@ -1,5 +1,5 @@
 Simple test flask application for proof of concept of gpg encrypted database backups.
-It retrieves the public key from the ubuntu key server by searching via the e-mail address and giving the option of which key to download. The database is encrypted as a gpg file.
+It retrieves the public key from the ubuntu key server by searching via the e-mail address and giving the option of which key to download. The database is encrypted as a gpg file. The templates are jinja2.
 
 To get started git clone this repo and then chmod +x run-flask-backup.py
 
