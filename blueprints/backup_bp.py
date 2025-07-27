@@ -1,126 +1,44 @@
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, current_app
-from functools import wraps
-from utils.gpg_backup import GPGBackup
+// Inside submitBackupFormAJAX() after `response => response.json()`
+// Instead of .then(response => response.json()), you'd have:
+fetch('/backup/create', {
+    method: 'POST',
+    body: formData
+})
+.then(response => {
+    if (response.ok) {
+        // If the backend sends a file, response.json() will fail.
+        // We need to handle it as a blob.
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'backup.dat'; // Default filename
+        if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+            const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (filenameMatch && filenameMatch[1]) {
+                filename = filenameMatch[1];
+            }
+        }
 
-backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
-
-@backup_bp.before_app_request
-def ensure_backup_dir_configured():
-    import os
-    DEFAULT_BACKUP_DIR = '/tmp/flask-backups'
-    config = current_app.config
-
-    if not config.get('BACKUP_DIR'):
-        backup_dir = os.environ.get('BACKUP_DIR', DEFAULT_BACKUP_DIR)
-        os.makedirs(backup_dir, exist_ok=True)
-        config['BACKUP_DIR'] = backup_dir
-
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Please log in to access this page.', 'warning')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-@backup_bp.route('/', strict_slashes=False)
-@login_required
-def backup_page_slash():
-    # Redirect to the non-trailing-slash version
-    return redirect(url_for('backup.backup_page'))
-
-@backup_bp.route('')
-@login_required
-def backup_page():
-    """Main backup page"""
-    # For now, just render a basic backup template
-    # You can add data fetching logic here later
-    return render_template('backup/index.html', 
-                           last_backup_timestamp=None,
-                           previous_backups=[])
-
-@backup_bp.route('/create', methods=['POST'])
-@login_required
-def create_backup_route():
-    """Create database backup - placeholder"""
-    try:
-        # 1. Create the regular backup file (must use real DatabaseBackup)
-        from utils.backup import DatabaseBackup
-        db_backup = DatabaseBackup(current_app.config)
-        backup_path = db_backup.create_backup()  # Should return a Path object
-
-
-        # 2. Check if encryption is requested (match form field names)
-        encrypt = request.form.get('encrypt_gpg') == 'on'
-        recipient_email = request.form.get('gpg_email')
-
-        if encrypt and recipient_email:
-            gpg_backup = GPGBackup(current_app.config)
-            encrypted_path = gpg_backup.create_encrypted_backup(backup_path, recipient_email)
-            if encrypted_path:
-                return jsonify({'success': True, 'backup': str(encrypted_path.name)})
-            else:
-                # Try to get the last error from the GPGBackup logger or return a generic message
-                import logging
-                logger = logging.getLogger('gpg_backup_logger')
-                last_error = None
-                if logger.handlers:
-                    for handler in logger.handlers:
-                        if hasattr(handler, 'stream') and hasattr(handler.stream, 'getvalue'):
-                            try:
-                                last_error = handler.stream.getvalue()
-                            except Exception:
-                                pass
-                return jsonify({'success': False, 'error': last_error or 'Encryption failed'}), 500
-        else:
-            return jsonify({'success': True, 'backup': str(backup_path.name)})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@backup_bp.route('/list', methods=['GET'])
-@login_required
-def list_backups():
-    """List available backups - placeholder"""
-    return jsonify({
-        'success': True,
-        'backups': []
-    })
-
-@backup_bp.route('/gpg/search', methods=['POST'])
-@login_required
-def gpg_search_keys():
-    """Search for GPG keys - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'GPG search not yet implemented'
-    })
-
-@backup_bp.route('/download/<backup_name>')
-@login_required
-def download_backup(backup_name):
-    """Download backup file - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'Download not yet implemented'
-    })
-
-@backup_bp.route('/restore', methods=['POST'])
-@login_required
-def restore_backup():
-    """Restore from backup - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'Restore not yet implemented'
-    })
-
-@backup_bp.route('/gpg/import', methods=['POST'])
-@login_required
-def gpg_import_key():
-    """Import GPG key - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'GPG import not yet implemented'
-    })
+        return response.blob().then(blob => {
+            // Create a link element
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename; // Use the extracted filename
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            alert('Backup created and download initiated.'); // Only show this if successful
+        });
+    } else {
+        // If the backend returns an error JSON (e.g., encryption failed), parse it as JSON
+        return response.json().then(errorData => {
+            alert('Backup failed: ' + (errorData.error || 'Unknown error'));
+        }).catch(() => {
+            // Fallback for non-JSON errors
+            alert('Backup failed: Server error ' + response.status);
+        });
+    }
+})
+.catch(err => {
+    alert('Backup failed: ' + err);
+});
