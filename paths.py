@@ -28,7 +28,7 @@ class AppPaths:
     # SSL certificate paths
     @property
     def ssl_dir(self) -> Path:
-        return Path(os.environ.get('SSL_CERT_DIR', self.app_root / "certs"))
+        return Path(os.environ.get('SSL_CERT_DIR', self.app_root / "ssl"))
 
     @property
     def ssl_cert_file(self) -> Path:
