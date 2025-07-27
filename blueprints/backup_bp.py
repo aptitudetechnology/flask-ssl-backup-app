@@ -46,7 +46,8 @@ def create_backup_route():
                     self.config = config
                 def create_backup(self):
                     # Create a dummy backup file for demonstration
-                    backup_dir = Path(current_app.config['paths'].backup_dir)
+                    # Use a safe default if config['paths'] is not available
+                    backup_dir = Path(current_app.config.get('BACKUP_DIR', '/tmp/flask-backups'))
                     backup_dir.mkdir(parents=True, exist_ok=True)
                     backup_path = backup_dir / 'dummy-backup.sql'
                     backup_path.write_text('-- SQL BACKUP DATA --')
