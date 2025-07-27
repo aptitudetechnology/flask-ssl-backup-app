@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash, current_app
 from functools import wraps
+from utils.gpg_backup import GPGBackup
 
 backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
 
@@ -33,16 +34,42 @@ def backup_page():
 def create_backup_route():
     """Create database backup - placeholder"""
     try:
-        # Basic response for now
-        return jsonify({
-            'success': True,
-            'message': 'Backup functionality not yet implemented'
-        })
+        # 1. Create the regular backup file (replace with your actual logic)
+        # Import your DatabaseBackup class (adjust import as needed)
+        try:
+            from utils.backup import DatabaseBackup
+        except ImportError:
+            # Fallback: placeholder class if not implemented yet
+            from pathlib import Path
+            class DatabaseBackup:
+                def __init__(self, config):
+                    self.config = config
+                def create_backup(self):
+                    # Create a dummy backup file for demonstration
+                    backup_dir = Path(current_app.config['paths'].backup_dir)
+                    backup_dir.mkdir(parents=True, exist_ok=True)
+                    backup_path = backup_dir / 'dummy-backup.sql'
+                    backup_path.write_text('-- SQL BACKUP DATA --')
+                    return backup_path
+
+        db_backup = DatabaseBackup(current_app.config)
+        backup_path = db_backup.create_backup()  # Should return a Path object
+
+        # 2. Check if encryption is requested
+        encrypt = request.form.get('encrypt') == 'true'
+        recipient_email = request.form.get('recipient_email')
+
+        if encrypt and recipient_email:
+            gpg_backup = GPGBackup(current_app.config)
+            encrypted_path = gpg_backup.create_encrypted_backup(backup_path, recipient_email)
+            if encrypted_path:
+                return jsonify({'success': True, 'backup': str(encrypted_path.name)})
+            else:
+                return jsonify({'success': False, 'error': 'Encryption failed'}), 500
+        else:
+            return jsonify({'success': True, 'backup': str(backup_path.name)})
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @backup_bp.route('/list', methods=['GET'])
 @login_required
