@@ -52,9 +52,10 @@ def create_backup_route():
         db_backup = DatabaseBackup(current_app.config)
         backup_path = db_backup.create_backup()  # Should return a Path object
 
-        # 2. Check if encryption is requested
-        encrypt = request.form.get('encrypt') == 'true'
-        recipient_email = request.form.get('recipient_email')
+
+        # 2. Check if encryption is requested (match form field names)
+        encrypt = request.form.get('encrypt_gpg') == 'on'
+        recipient_email = request.form.get('gpg_email')
 
         if encrypt and recipient_email:
             gpg_backup = GPGBackup(current_app.config)
