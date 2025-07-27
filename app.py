@@ -68,7 +68,7 @@ def create_app(config_name=None):
     @app.route('/')
     def index():
         """Home page"""
-        return render_template('index.html')
+        return render_template('base.html')
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():
