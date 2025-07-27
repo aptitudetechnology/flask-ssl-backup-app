@@ -1,13 +1,3 @@
-Okay, here is the updated `gpg-backup-modal.js` file.
-
-I've made two key changes:
-
-1.  **Modified `searchGPGKeys`:** It now reliably fetches the email from the `gpgModalEmail` hidden input within the modal if no email is explicitly passed to it. This input is populated by the main form's email.
-2.  **Modified `GPGBackupModal.show()`:** After showing the "key setup" step, it now automatically calls `searchGPGKeys()` using the email that was just set.
-
-<!-- end list -->
-
-```javascript
 // gpg-backup-modal.js - Enhanced Version
 
 // Variable to store the ID of the selected GPG key
@@ -19,16 +9,16 @@ let progressInterval = null; // Store the progress polling interval
  * Searches for GPG keys on a key server based on the provided email.
  */
 export function searchGPGKeys(email = null) {
-    // Get email from provided argument or from the hidden input within the modal
-    const gpgModalEmailInput = document.getElementById("gpgModalEmail");
-    const searchEmail = email || (gpgModalEmailInput ? gpgModalEmailInput.value.trim() : '');
-    
+    const emailInput = document.getElementById("gpgEmailInput");
     const resultsContainer = document.getElementById("gpgKeyResults");
     const importBtn = document.getElementById("importKeyBtn");
 
+    // Use provided email or get from input
+    const searchEmail = email || (emailInput ? emailInput.value.trim() : '');
+
     if (!searchEmail) {
         if (resultsContainer) {
-            resultsContainer.innerHTML = `<div class="alert alert-warning">Please ensure an email address is provided to search for GPG keys.</div>`;
+            resultsContainer.innerHTML = `<div class="alert alert-warning">Please enter a valid email address.</div>`;
         }
         return;
     }
@@ -161,7 +151,7 @@ export function importSelectedGPGKey() {
         }
 
         // Success - update UI
-        const encryptionEmail = document.getElementById("gpgModalEmail")?.value || 'selected key'; // Get from hidden input
+        const encryptionEmail = window.GPG_ENCRYPTION_EMAIL || 'selected key';
         
         // Update email displays
         const encryptEmailSpan = document.getElementById("gpgEncryptEmail");
@@ -198,10 +188,8 @@ export function importSelectedGPGKey() {
         }
     })
     .finally(() => {
-        // This finally block ensures button state is reset if needed, though in success case it's hidden.
-        // For failed cases, it re-enables it.
-        if (importBtn && importBtn.style.display !== 'none') { // Only reset if not hidden
-            importBtn.disabled = false;
+        if (importBtn) {
+            importBtn.disabled = true;
             importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
         }
     });
@@ -232,9 +220,9 @@ export class GPGBackupModal {
         this.cancelBackupBtn = document.getElementById('cancelBackupBtn');
 
         // Progress elements
-        this.progressBar = document.getElementById('progressBar'); // Corrected ID
-        this.progressLabel = document.getElementById('progressLabel'); // Corrected ID
-        this.progressStatus = document.getElementById('backupStatusMessage'); // Corrected ID
+        this.progressBar = document.getElementById('backupProgressBar');
+        this.progressLabel = document.getElementById('backupProgressLabel');
+        this.progressStatus = document.getElementById('backupProgressStatus');
 
         this.showStep('keySetup');
     }
@@ -243,11 +231,6 @@ export class GPGBackupModal {
         if (this.bootstrapModal) {
             this.bootstrapModal.show();
             this.showStep('keySetup');
-            // Auto-search for keys when the modal is shown
-            const gpgEmail = document.getElementById('gpgModalEmail')?.value;
-            if (gpgEmail) {
-                searchGPGKeys(gpgEmail);
-            }
         }
     }
 
@@ -268,21 +251,6 @@ export class GPGBackupModal {
             case 'keySetup':
                 if (this.keySetupStep) this.keySetupStep.style.display = 'block';
                 this.setButtonVisibility(false, false, true);
-                // Reset states for key setup
-                const resultsContainer = document.getElementById("gpgKeyResults");
-                const importBtn = document.getElementById("importKeyBtn");
-                const selectedKeyInfo = document.getElementById("selectedKeyInfo");
-                const statusLine = document.getElementById("gpgStatusLine");
-
-                if (resultsContainer) resultsContainer.innerHTML = ''; // Clear previous results
-                if (importBtn) {
-                    importBtn.style.display = 'inline-block'; // Ensure button is visible
-                    importBtn.disabled = true; // Disabled until key is selected
-                    importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
-                }
-                if (selectedKeyInfo) selectedKeyInfo.style.display = "none";
-                if (statusLine) statusLine.style.display = "none"; // Hide initial "Checking GPG config"
-                selectedKeyId = null; // Clear selected key
                 break;
             case 'progress':
                 if (this.backupProgressStep) this.backupProgressStep.style.display = 'block';
@@ -321,14 +289,13 @@ export class GPGBackupModal {
         try {
             // Get form data
             const formData = new FormData();
-            // These values come from the main backupForm, not directly from this modal
-            const format = document.querySelector('input[name="format"]:checked')?.value || document.getElementById('backupFormat')?.value || 'zip';
-            const includeAttachments = document.getElementById('includeAttachments')?.checked || false;
-            const gpgEmail = document.getElementById('gpgModalEmail')?.value; // Get email from modal's hidden input
+            const format = document.querySelector('input[name="format"]:checked')?.value || 'zip';
+            const includeAttachments = document.getElementById('include_attachments')?.checked || false;
+            const gpgEmail = document.getElementById('gpgModalEmail')?.value;
 
             formData.append('format', format);
             if (includeAttachments) formData.append('include_attachments', 'on');
-            formData.append('encrypt_gpg', 'on'); // This will always be 'on' if this modal is triggered
+            formData.append('encrypt_gpg', 'on');
             formData.append('gpg_email', gpgEmail);
 
             // Start backup job
@@ -358,11 +325,6 @@ export class GPGBackupModal {
     async pollProgress() {
         if (!currentJobId) return;
 
-        // Clear any existing interval before setting a new one to prevent multiple polls
-        if (progressInterval) {
-            clearTimeout(progressInterval);
-        }
-
         try {
             const response = await fetch(`/backup/progress/${currentJobId}`);
             const data = await response.json();
@@ -385,7 +347,7 @@ export class GPGBackupModal {
                 }
             } else {
                 // Continue polling
-                progressInterval = setTimeout(() => this.pollProgress(), 1000);
+                setTimeout(() => this.pollProgress(), 1000);
             }
 
         } catch (error) {
@@ -395,18 +357,14 @@ export class GPGBackupModal {
     }
 
     updateProgress(percentage, status) {
-        // Ensure progress bar elements are correctly targeted by their IDs as per gpg-modal.html
         if (this.progressBar) {
             this.progressBar.style.width = `${percentage}%`;
             this.progressBar.setAttribute('aria-valuenow', percentage);
         }
-        if (this.progressLabel) { // This is for 'progressLabel'
-            this.progressLabel.textContent = `Creating backup... ${percentage}%`;
+        if (this.progressLabel) {
+            this.progressLabel.textContent = `${percentage}%`;
         }
-        // The original HTML had 'progressPercentage' and 'backupStatusMessage'
-        // The JS was looking for 'progressLabel' and 'progressStatus'
-        // I've adjusted the JS properties in the constructor to match the HTML IDs more directly.
-        if (this.progressStatus) { // This is for 'backupStatusMessage'
+        if (this.progressStatus) {
             this.progressStatus.textContent = status;
         }
     }
@@ -427,8 +385,6 @@ export class GPGBackupModal {
         if (errorElement) {
             errorElement.textContent = message;
         }
-        // Also ensure download and confirm buttons are hidden, cancel visible
-        this.setButtonVisibility(false, false, true);
     }
 
     async cancelBackup() {
@@ -445,42 +401,14 @@ export class GPGBackupModal {
 
     cleanup() {
         if (progressInterval) {
-            clearTimeout(progressInterval); // Use clearTimeout for setTimeout
+            clearInterval(progressInterval);
             progressInterval = null;
         }
         currentJobId = null;
-        selectedKeyId = null; // Clear selected key on cleanup
-        // Reset modal content/state when it's hidden for next use
-        if (document.getElementById("gpgKeyResults")) {
-            document.getElementById("gpgKeyResults").innerHTML = '';
-        }
-        if (document.getElementById("importKeyBtn")) {
-            document.getElementById("importKeyBtn").style.display = 'inline-block';
-            document.getElementById("importKeyBtn").disabled = true;
-        }
-        if (document.getElementById("selectedKeyInfo")) {
-            document.getElementById("selectedKeyInfo").style.display = 'none';
-        }
-        if (document.getElementById("gpgStatusLine")) {
-            document.getElementById("gpgStatusLine").style.display = 'none';
-        }
-        if (document.getElementById("confirmCreateBackupBtn")) {
-             document.getElementById("confirmCreateBackupBtn").style.display = 'none';
-        }
-         if (document.getElementById("downloadBackupBtn")) {
-             document.getElementById("downloadBackupBtn").style.display = 'none';
-        }
-        if (document.getElementById("errorMessage")) {
-             document.getElementById("errorMessage").textContent = 'Unable to create encrypted backup. Please try again.';
-        }
-        // Reset progress bar to 0%
-        this.updateProgress(0, '...'); 
     }
 
     setEncryptionEmail(email) {
-        // window.GPG_ENCRYPTION_EMAIL is not strictly needed if we always read from gpgModalEmail
-        // but keeping it for now if other parts of code might use it.
-        window.GPG_ENCRYPTION_EMAIL = email; 
+        window.GPG_ENCRYPTION_EMAIL = email;
         const elements = ['gpgEncryptEmail', 'gpgModalEmail'];
         elements.forEach(id => {
             const element = document.getElementById(id);
@@ -498,5 +426,3 @@ export class GPGBackupModal {
 // Make functions globally available for inline event handlers
 window.selectGPGKey = selectGPGKey;
 window.searchGPGKeys = searchGPGKeys;
-window.importSelectedGPGKey = importSelectedGPGKey; // Ensure this is also globally available
-```
