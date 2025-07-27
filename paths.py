@@ -22,7 +22,8 @@ class AppPaths:
         self._data_dir_path = self.app_root / "data"
         self._log_dir_path = self.app_root / "logs"
         self._ssl_dir_path = self.app_root / "ssl" 
-        
+        print(f"DEBUG: SSL Directory Path: {self._ssl_dir_path}")
+
         # Call _ensure_directories to create all necessary folders on initialization
         self._ensure_directories()
 
