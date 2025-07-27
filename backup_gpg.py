@@ -76,8 +76,8 @@ class GPGBackup:
                 import_result = self.gpg.recv_keys(self.config.GPG_KEYSERVER, identifiers[0])
                 
                 self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
-                self.logger.debug(f"DEBUG: GPG recv_keys status: {import_result.status}")
-                self.logger.debug(f"DEBUG: GPG recv_keys stderr: {import_result.stderr}")
+                self.logger.debug(f"DEBUG: GPG recv_keys count: {import_result.count}")
+                self.logger.debug(f"DEBUG: GPG recv_keys stderr: {getattr(import_result, 'stderr', 'No stderr available')}")
                 
                 if import_result.results:
                     imported_key = import_result.results[0]
