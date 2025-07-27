@@ -110,6 +110,7 @@ class DevelopmentConfig(Config):
     DEBUG = True
     TESTING = False
     GPG_BINARY_PATH = '/usr/bin/gpg' # This is the path to the 'gpg' command-line tool
+    SSL_ENABLED = True #
 
 
 class ProductionConfig(Config):
