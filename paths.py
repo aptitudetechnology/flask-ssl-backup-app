@@ -5,21 +5,23 @@ from pathlib import Path
 from typing import Optional, Dict
 
 
+
 class AppPaths:
-    @property
-    def temp_dir(self) -> Path:
-        """Temporary directory for backup operations"""
-        return self.backup_dir / "temp"
     """Centralized path management using pathlib"""
 
     def __init__(self, app_root: Optional[Path] = None):
         self.app_root = Path(app_root) if app_root else Path.cwd()
+        self._data_dir_init = Path(os.environ.get('DATA_DIR', self.app_root / "data"))
+        self._log_dir_init = Path(os.environ.get('LOG_DIR', self.app_root / "logs"))
         self._ensure_directories()
 
-    # Core application paths
+    @property
+    def data_dir(self) -> Path:
+        return self._data_dir_init
+
     @property
     def database_file(self) -> Path:
-        return self.app_root / "customers.db"
+        return self.data_dir / "customers.db"
 
     @property
     def static_dir(self) -> Path:
@@ -29,7 +31,6 @@ class AppPaths:
     def templates_dir(self) -> Path:
         return self.app_root / "templates"
 
-    # SSL certificate paths
     @property
     def ssl_dir(self) -> Path:
         return Path(os.environ.get('SSL_CERT_DIR', self.app_root / "ssl"))
@@ -42,10 +43,9 @@ class AppPaths:
     def ssl_key_file(self) -> Path:
         return Path(os.environ.get('SSL_KEY_PATH', self.ssl_dir / "key.pem"))
 
-    # Backup paths
     @property
     def backup_dir(self) -> Path:
-        return Path(os.environ.get('BACKUP_DIR', self.app_root / "backups"))
+        return Path(os.environ.get('BACKUP_DIR', self.data_dir / "backups"))
 
     @property
     def temp_backup_dir(self) -> Path:
@@ -55,10 +55,87 @@ class AppPaths:
     def archive_backup_dir(self) -> Path:
         return self.backup_dir / "archive"
 
-    # GPG paths
+    @property
+    def temp_dir(self) -> Path:
+        """Temporary directory for backup operations"""
+        return self.data_dir / "temp"
+
     @property
     def gpg_home_dir(self) -> Path:
-        return Path(os.environ.get('GPG_HOME_DIR', Path.home() / ".gnupg"))
+        return Path(os.environ.get('GPG_HOME_DIR', self.data_dir / "gpg"))
+
+    @property
+    def gpg_keys_dir(self) -> Path:
+        return self.gpg_home_dir / "keys"
+
+    @property
+    def log_dir(self) -> Path:
+        return self._log_dir_init
+
+    @property
+    def log_file(self) -> Path:
+        return self.log_dir / "app.log"
+
+    @property
+    def error_log_file(self) -> Path:
+        return self.log_dir / "error.log"
+
+    @property
+    def backup_log_file(self) -> Path:
+        return self.log_dir / "backup.log"
+
+    @property
+    def gpg_log_file(self) -> Path:
+        return self.log_dir / "gpg_backup.log"
+
+    def _ensure_directories(self):
+        # Ensure data and log dirs are created first
+        try:
+            self._data_dir_init.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Failed to create data_dir {self._data_dir_init}: {str(e)}")
+        try:
+            self._log_dir_init.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Failed to create log_dir {self._log_dir_init}: {str(e)}")
+
+        dirs_to_create = [
+            self.backup_dir,
+            self.temp_backup_dir,
+            self.archive_backup_dir,
+            self.log_dir,
+            self.ssl_dir,
+            self.static_dir,
+            self.templates_dir,
+            self.gpg_home_dir
+        ]
+        for directory in dirs_to_create:
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                print(f"Warning: Cannot create directory {directory} - permission denied")
+            except Exception as e:
+                print(f"Warning: Failed to create directory {directory}: {str(e)}")
+
+    def validate_paths(self) -> Dict[str, bool]:
+        dirs = {
+            'data_dir_exists': self.data_dir.is_dir(),
+            'backup_dir': self.backup_dir,
+            'log_dir': self.log_dir,
+            'ssl_dir': self.ssl_dir,
+            'static_dir': self.static_dir,
+            'templates_dir': self.templates_dir,
+            'gpg_home_dir_exists': self.gpg_home_dir.is_dir()
+        }
+        results = {k: (v.exists() and v.is_dir()) if isinstance(v, Path) else v for k, v in dirs.items()}
+        files_to_check = {
+            'ssl_cert': self.ssl_cert_file,
+            'ssl_key': self.ssl_key_file,
+            'database': self.database_file,
+            'gpg_log_file': self.gpg_log_file
+        }
+        results.update({f"{k}_exists": v.exists() for k, v in files_to_check.items()})
+        return results
 
     @property
     def gpg_keys_dir(self) -> Path:
@@ -71,7 +148,7 @@ class AppPaths:
 
     @property
     def log_file(self) -> Path:
-        return self.log_dir / "app.log"
+            'gpg_log_file': self.gpg_log_file
 
     @property
     def error_log_file(self) -> Path:
