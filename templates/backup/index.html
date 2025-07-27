@@ -273,11 +273,11 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(async response => {
             const contentType = response.headers.get('Content-Type');
-            if (response.ok && contentType && (contentType.includes('application/octet-stream') || contentType.includes('application/zip') || contentType.includes('application/gzip'))) {
-                // It's a file, download it
-                const disposition = response.headers.get('Content-Disposition');
+            const disposition = response.headers.get('Content-Disposition');
+            // Treat as file if Content-Disposition: attachment is present, regardless of Content-Type
+            if (response.ok && disposition && disposition.includes('attachment')) {
                 let filename = 'backup';
-                if (disposition && disposition.includes('filename=')) {
+                if (disposition.includes('filename=')) {
                     filename = disposition.split('filename=')[1].split(';')[0].replace(/"/g, '').trim();
                 }
                 const blob = await response.blob();
@@ -291,11 +291,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     window.URL.revokeObjectURL(url);
                     a.remove();
                 }, 100);
-                // Optionally show a toast or notification here, but do NOT show error alert
-                // alert('Backup created and download started.');
-                return; // Prevent further error handling
+                // Optionally show a toast or notification here
+                return;
             }
-            // Try to parse JSON error
+            // If not a file, try to parse JSON error (only if not a file)
             let data;
             try {
                 data = await response.json();
