@@ -1,27 +1,51 @@
+ tree
 .
 ├── app.py
+├── app.py.bak
 ├── backup_gpg.py
+├── backup_gpg.py.bak
+├── backup_gpg.py.bak2
+├── backup_gpg.py.bak3
 ├── backup.py
+├── backup.py.bak
+├── blueprints
+│   ├── backup_bp.py
+│   ├── backup_bp.py.bak
+│   ├── backup.py
+│   └── __init__.py
 ├── config.py
+├── config.py.bak
+├── config.py.bak1
 ├── models.py
+├── models.py.bak
+├── paths.py
+├── paths.py.bak
 ├── readme.md
 ├── requirements.txt
+├── routes.py
+├── routes.py.bak
+├── routes.py.bak1
+├── run-flask-backup.py
+├── scripts
+│   └── create_admin.py
 ├── ssl
 │   └── gen-cert.sh
 ├── static
 │   ├── css
-│   │   └── style.css
+│   │   └── main.css
 │   └── js
 │       ├── gpg-backup-modal.js
+│       ├── gpg-backup-modal.js.bak
 │       └── main.js
 ├── templates
 │   ├── backup
-│   │   ├── index.html
-│   │   └── modals
-│   │       └── gpg-modal.html
-│   ├── backup.html
+│   │   ├── backupmodals
+│   │   │   └── gpg-modal.html
+│   │   └── index.html
 │   ├── base.html
-│   └── customers.html
+│   ├── customers.html
+│   ├── edit_customer.html
+│   └── login.html
 ├── tests
 │   ├── __init__.py
 │   ├── test_app.py
@@ -33,6 +57,7 @@
     ├── __init__.py
     └── validators.py
 
+12 directories, 45 files
 
     Key Requirements:
 1. Flask app with SSL support and SQLite3 customer database
