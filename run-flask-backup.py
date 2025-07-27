@@ -96,7 +96,17 @@ def main():
     print("   • SSL support (if configured)")
     print("\n💡 Press Ctrl+C to stop the server")
     print("-" * 50)
-    
+
+    # Ensure admin user exists before starting the app
+    admin_script = Path('scripts/create_admin.py')
+    if admin_script.exists():
+        print("👤 Ensuring admin user exists...")
+        result = subprocess.run([str(python_path), str(admin_script)])
+        if result.returncode == 0:
+            print("✅ Admin user check complete")
+        else:
+            print("⚠️ Admin user creation script failed. Check output above.")
+
     # Run the Flask application
     try:
         subprocess.run([str(python_path), 'app.py'])
