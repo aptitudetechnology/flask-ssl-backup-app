@@ -264,6 +264,34 @@ document.addEventListener('DOMContentLoaded', function () {
         emailInput.required = show;
     });
 
+    // AJAX form submission to show JSON response
+    backupForm?.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(backupForm);
+        fetch('/backup/create', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Backup created: ' + data.backup);
+            } else {
+                alert('Backup failed: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            alert('Backup failed: ' + err);
+        });
+    });
+
+    // Toggle GPG email field visibility
+    encryptCheckbox?.addEventListener('change', function () {
+        const show = this.checked;
+        emailField.style.display = show ? 'block' : 'none';
+        emailInput.required = show;
+    });
+
     // Form submission handler
     backupForm?.addEventListener('submit', function (e) {
         const gpgChecked = encryptCheckbox?.checked;
