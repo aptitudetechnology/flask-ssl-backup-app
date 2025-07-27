@@ -265,7 +265,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // Unified AJAX backup submission function
-    function submitBackupFormAJAX() {
+    // Unified AJAX backup submission function
+function submitBackupFormAJAX() {
     // Disable the submit button to prevent double clicks
     const submitButton = document.querySelector('button[type="submit"]');
     if (submitButton) {
@@ -283,7 +284,21 @@ document.addEventListener('DOMContentLoaded', function () {
             submitButton.disabled = false;
         }
         
-        // Your existing response handling code...
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Parse the JSON response
+        const data = await response.json();
+        
+        if (data.success && data.download_url) {
+            // Trigger download using the provided URL
+            window.location.href = data.download_url;
+        } else if (data.error) {
+            alert('Backup failed: ' + data.error);
+        } else {
+            alert('Backup failed: Unknown error');
+        }
     })
     .catch(err => {
         // Re-enable button on error too
