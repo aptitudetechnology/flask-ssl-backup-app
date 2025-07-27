@@ -14,7 +14,12 @@ from models import db, User, BackupRecord, CustomerService
 from backup import DatabaseBackup
 from backup_gpg import GPGBackup
 
-from routes import register_routes  # Import the routes registration function
+# --- NEW: Import your backup_bp blueprint ---
+from blueprints.backup_bp import backup_bp
+
+# --- NEW: Import your core routes registration function ---
+# Assuming 'routes.py' now contains 'register_core_routes(app)'
+from routes import register_core_routes
 
 
 def create_app(config_name=None):
@@ -30,6 +35,9 @@ def create_app(config_name=None):
 
     # Configure Flask app
     app.config.update(config.get_flask_config())
+    # --- NEW: Store config in app.config for easy access ---
+    app.config['APP_CONFIG'] = config 
+
 
     # Modern SQLAlchemy configuration
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{config.paths.database_file}'
@@ -51,10 +59,25 @@ def create_app(config_name=None):
 
     # Initialize backup systems
     backup_manager = DatabaseBackup(config)
-    gpg_backup = GPGBackup(config) if config.GPG_RECIPIENT_EMAIL else None
+    # Ensure gpg_backup is always an instance, even if recipient email is None,
+    # so we don't get NoneType errors when calling its methods.
+    # The methods themselves should handle the absence of a recipient email if needed.
+    gpg_backup = GPGBackup(config) 
 
-    # Register routes (passing needed objects)
-    register_routes(app, config, db, backup_manager, gpg_backup)
+    # --- NEW: Store managers in app.extensions for easy access in blueprints/routes ---
+    app.extensions['backup_manager'] = backup_manager
+    app.extensions['gpg_backup'] = gpg_backup
+    # app.extensions['db'] = db # You might also store db here if needed, but db.session is usually enough
+
+    # --- NEW: Register blueprints ---
+    app.register_blueprint(backup_bp)
+
+    # --- NEW: Register core routes (from routes.py) ---
+    # Call the function that registers your non-blueprint routes
+    register_core_routes(app) 
+
+    # --- REMOVED: Original register_routes call ---
+    # register_routes(app, config, db, backup_manager, gpg_backup)
 
     return app
 
@@ -101,7 +124,7 @@ def setup_security_headers(app, config):
 
 if __name__ == '__main__':
     app = create_app()
-    config = get_config()
+    config = get_config() # Re-get config for standalone run, or pass from create_app if preferred
 
     # SSL configuration
     ssl_context = None
