@@ -14,6 +14,10 @@ from paths import AppPaths  # ✅ Use external AppPaths
 class Config:
     """Base configuration class with pathlib integration."""
 
+
+    LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
     def __init__(self):
         """Initialize configuration with path manager"""
         self.paths = AppPaths()
