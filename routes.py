@@ -13,6 +13,15 @@ from config import get_config  # Import configuration
 
 
 def register_routes(app, config, db, backup_manager, gpg_backup):
+    @app.route('/customers/<int:customer_id>/delete', methods=['POST'])
+    @login_required
+    def delete_customer(customer_id):
+        success = CustomerService.delete_customer(customer_id, soft_delete=True)
+        if success:
+            flash('Customer deactivated successfully.', 'success')
+        else:
+            flash('Customer not found.', 'danger')
+        return redirect(url_for('customers'))
 
     def login_required(f):
         @wraps(f)
