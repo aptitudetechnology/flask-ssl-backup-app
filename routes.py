@@ -6,6 +6,10 @@ from functools import wraps
 from pathlib import Path
 import sqlite3
 from datetime import datetime
+from models import db, User, BackupRecord, CustomerService  # Import models
+from backup import DatabaseBackup
+from backup_gpg import GPGBackup
+from config import get_config  # Import configuration   
 
 
 def register_routes(app, config, db, backup_manager, gpg_backup):
