@@ -104,11 +104,14 @@ def list_backups():
 @backup_bp.route('/gpg/search', methods=['POST'])
 @login_required
 def gpg_search_keys():
-    """Search for GPG keys - placeholder"""
-    return jsonify({
-        'success': False,
-        'error': 'GPG search not yet implemented'
-    })
+    email = request.json.get('email') if request.is_json else request.form.get('email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Email is required'}), 400
+
+    from utils.gpg_backup import GPGBackup
+    gpg_backup = GPGBackup(current_app.config)
+    keys = gpg_backup.search_keys(email)
+    return jsonify({'success': True, 'keys': keys})
 
 @backup_bp.route('/download/<backup_name>')
 @login_required
