@@ -13,6 +13,10 @@ from config import get_config  # Import configuration
 
 
 def register_routes(app, config, db, backup_manager, gpg_backup):
+    @app.route('/backup')
+    @login_required
+    def backup_page():
+        return render_template('backup.html')
 
     def login_required(f):
         @wraps(f)
