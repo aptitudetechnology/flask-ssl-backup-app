@@ -84,7 +84,7 @@ def create_backup_route():
     """Create database backup"""
     try:
         backup_manager = current_app.extensions.get('backup_manager')
-        gpg_backup = current_app.extensions.get('utility_gpg_backup')
+        gpg_backup = current_app.extensions.get('gpg_backup')
 
         if not backup_manager:
             return jsonify({'success': False, 'error': 'Backup manager not initialized'}), 500
@@ -331,7 +331,7 @@ def gpg_search_keys():
     Returns JSON: {"success": true, "keys": [...]} or {"success": false, "error": "..."}
     """
     try:
-        gpg_backup = current_app.extensions.get('utility_gpg_backup')
+        gpg_backup = current_app.extensions.get('gpg_backup')
         if not gpg_backup:
             return jsonify({'success': False, 'error': 'GPG Backup manager not initialized'}), 500
 
@@ -360,7 +360,7 @@ def gpg_import_key():
     Returns JSON: {"success": true, "message": "Key imported."} or {"success": false, "error": "..."}
     """
     try:
-        gpg_backup = current_app.extensions.get('utility_gpg_backup')
+        gpg_backup = current_app.extensions.get('gpg_backup')
         if not gpg_backup:
             return jsonify({'success': False, 'error': 'GPG Backup manager not initialized'}), 500
 
