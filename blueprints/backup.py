@@ -61,7 +61,7 @@ def backup_page():
             previous_backups = []
             records = BackupRecord.query.order_by(BackupRecord.created_at.desc()).limit(10).all() # Limit to 10 for example
             for record in records:
-                backup_path = backup_manager.config.paths.backup_dir / record.filename
+                backup_path = backup_manager.app_paths.backup_dir / record.filename
                 previous_backups.append({
                     'filename': record.filename,
                     'size': f"{record.file_size / (1024*1024):.2f} MB" if record.file_size else 'N/A', # Convert bytes to MB
@@ -190,7 +190,7 @@ def list_backups():
             return jsonify({'success': False, 'error': 'Backup manager not initialized'}), 500
 
         for record in backup_records:
-            backup_path = backup_manager.config.paths.backup_dir / record.filename
+            backup_path = backup_manager.app_paths.backup_dir / record.filename
             backup_info = {
                 'id': record.id,
                 'filename': record.filename,
@@ -231,10 +231,10 @@ def download_backup(backup_name):
             flash('Backup record not found', 'error')
             return redirect(url_for('dashboard'))
 
-        backup_path = backup_manager.config.paths.backup_dir / backup_name
+        backup_path = backup_manager.app_paths.backup_dir / backup_name
 
         # Security check: Ensure the path is within the designated backup directory
-        if not str(backup_path.resolve()).startswith(str(backup_manager.config.paths.backup_dir.resolve())):
+        if not str(backup_path.resolve()).startswith(str(backup_manager.app_paths.backup_dir.resolve())):
             flash('Invalid backup file path detected.', 'error')
             return redirect(url_for('dashboard'))
 
@@ -270,7 +270,7 @@ def restore_backup():
             uploaded_file = request.files.get('backup_file_upload') # Assuming 'backup_file_upload' is the name
             if uploaded_file and uploaded_file.filename != '':
                 # Save the uploaded file temporarily
-                temp_restore_path = backup_manager.config.paths.backup_dir / uploaded_file.filename
+                temp_restore_path = backup_manager.app_paths.backup_dir / uploaded_file.filename
                 uploaded_file.save(temp_restore_path)
                 backup_path = temp_restore_path
                 current_app.logger.info(f"Uploaded file for restore: {temp_restore_path}")
@@ -281,20 +281,20 @@ def restore_backup():
             backup_record = BackupRecord.query.filter_by(filename=backup_name).first()
             if not backup_record:
                 return jsonify({'success': False, 'error': 'Backup record not found'}), 404
-            backup_path = backup_manager.config.paths.backup_dir / backup_name
+            backup_path = backup_manager.app_paths.backup_dir / backup_name
 
 
-        if not str(backup_path.resolve()).startswith(str(backup_manager.config.paths.backup_dir.resolve())):
+        if not str(backup_path.resolve()).startswith(str(backup_manager.app_paths.backup_dir.resolve())):
             return jsonify({'success': False, 'error': 'Invalid backup file path detected.'}), 400
 
         if not backup_path.exists():
             return jsonify({'success': False, 'error': 'Backup file not found on server storage.'}), 404
 
         # Create a pre-restore backup (important safety measure)
-        # Only pass supported arguments: compress and include_metadata
+        # Fixed: Use correct method signature for create_backup
         current_backup = backup_manager.create_backup(
-            compress=True,
-            include_metadata=True
+            format='gz',
+            backup_type='pre_restore'
         )
         if not current_backup:
             return jsonify({'success': False, 'error': 'Failed to create pre-restore backup'}), 500
