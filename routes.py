@@ -77,7 +77,7 @@ def register_core_routes(app): # Removed config, db, backup_manager, gpg_backup 
             
             health_status = check_system_health(app_config) # Pass app_config if needed
 
-            return render_template('dashboard.html',
+            return render_template('backup/index.html',
                                    backup_stats=backup_stats,
                                    recent_backups=recent_backups,
                                    db_info=db_info,
@@ -86,7 +86,7 @@ def register_core_routes(app): # Removed config, db, backup_manager, gpg_backup 
         except Exception as e:
             current_app.logger.error(f"Dashboard error: {str(e)}")
             flash('Error loading dashboard', 'error')
-            return render_template('dashboard.html',
+            return render_template('backup/index.html',
                                    backup_stats={},
                                    recent_backups=[],
                                    db_info={},
