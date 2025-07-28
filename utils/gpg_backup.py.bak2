@@ -7,17 +7,6 @@ import os
 from typing import Optional, Dict, List
 
 class GPGBackup:
-    # ---------------- NEW helpers ----------------
-    def get_key_info_json(self, email: str) -> Dict:
-        """Return key info in a JSON‑friendly structure."""
-        info = self.get_key_info(email)
-        if not info:
-            return {'success': False, 'message': f'No key found for {email}'}
-        return {'success': True, 'data': info}
-
-    def get_key_info_for_template(self, email: str) -> Optional[Dict]:
-        """Return key info ready for direct use in Jinja templates."""
-        return self.get_key_info(email)
     def __init__(self, config):
         self.config = config # Store the full config object
 
