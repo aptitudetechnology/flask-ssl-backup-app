@@ -31,7 +31,7 @@ from routes import register_core_routes
 # --- Import Utility Functions (the GPGBackup causing the error) ---
 from utils.gpg_backup import GPGBackup as UtilityGPGBackup # Alias to avoid conflict
 from blueprints.gpg import gpg_bp
-app.register_blueprint(gpg_bp)
+
 
 def datetimeformat(value, format='%Y-%m-%d %H:%M'):
     """Format a datetime for Jinja2 templates."""
@@ -112,6 +112,7 @@ def create_app(config_name=None):
 
     # --- NEW: Register blueprints ---
     app.register_blueprint(backup_bp)
+    app.register_blueprint(gpg_bp)
 
     # --- NEW: Register core routes (from routes.py) ---
     # Call the function that registers your non-blueprint routes
