@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function () {
         emailInput.required = show;
     });
 
-    // Single form submission handler
+    // Fixed form submission handler for /backup/index.html
     backupForm.addEventListener('submit', function (e) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Disable submit button to prevent double clicks
         if (submitButton) {
             submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="spinner-border spinner-border-sm me-2"></i>Creating Backup...';
+            submitButton.innerHTML = '<i class="spinner-border spinner-border-sm me-2"></i>Processing...';
         }
 
         const gpgChecked = encryptCheckbox?.checked;
@@ -296,28 +296,30 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            // Show GPG modal for confirmation (keeping your existing logic)
+            // Show GPG modal - DO NOT call submitBackup here
             const modalElement = document.getElementById('gpgConfirmationModal');
             if (!modalElement) {
-                alert('GPG modal not found in the DOM. Check that it\'s included correctly.');
-                console.error('Available modals:', Array.from(document.querySelectorAll('.modal')).map(m => m.id));
+                alert('GPG modal not found in the DOM.');
                 resetSubmitButton();
                 return;
             }
 
-            // Initialize and show modal using your existing ES module class
+            // Initialize and show modal
             if (!window.gpgModalInstance) {
                 window.gpgModalInstance = new GPGBackupModal('gpgConfirmationModal');
             }
+            
+            // Set the email in the modal
             window.gpgModalInstance.setEncryptionEmail(email);
-            // Set the modal's onConfirm callback to our submitBackup function
-            window.gpgModalInstance.onConfirm = submitBackup;
+            
+            // Show the modal - the modal will handle the actual backup creation
             window.gpgModalInstance.show();
             
-            // Reset button here since modal will handle the submission
+            // Reset button since modal will handle everything
             resetSubmitButton();
+            
         } else {
-            // Regular backup
+            // Regular backup (non-GPG)
             submitBackup();
         }
     });

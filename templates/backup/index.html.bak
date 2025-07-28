@@ -246,7 +246,7 @@
 <script type="module">
 import { GPGBackupModal, importSelectedGPGKey, searchGPGKeys, selectGPGKey } from "{{ url_for('static', filename='js/gpg-backup-modal.js') }}";
 
-// Expose functions for inline HTML event handlers (if needed, but generally avoid inline handlers)
+// Expose functions for inline HTML event handlers (if needed)
 window.importSelectedGPGKey = importSelectedGPGKey;
 window.searchGPGKeys = searchGPGKeys;
 window.selectGPGKey = selectGPGKey;
@@ -256,6 +256,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const emailField = document.getElementById('gpgEmailField');
     const emailInput = document.getElementById('gpgEmail');
     const backupForm = document.getElementById('backupForm');
+    const submitButton = document.getElementById('createBackupBtn');
+
+    if (!backupForm) {
+        console.error('Backup form not found');
+        return;
+    }
 
     // Toggle GPG email field visibility
     encryptCheckbox?.addEventListener('change', function () {
@@ -264,98 +270,132 @@ document.addEventListener('DOMContentLoaded', function () {
         emailInput.required = show;
     });
 
-    // Unified AJAX backup submission function
-    // Unified AJAX backup submission function
-function submitBackupFormAJAX() {
-    // Disable the submit button to prevent double clicks
-    const submitButton = document.querySelector('button[type="submit"]');
-    if (submitButton) {
-        submitButton.disabled = true;
-    }
-    
-    const formData = new FormData(backupForm);
-    fetch('/backup/create', {
-        method: 'POST',
-        body: formData
-    })
-    .then(async response => {
-        // Re-enable button
+    // Single form submission handler
+    backupForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        
+        console.log('Form submitted - processing...');
+        
+        // Disable submit button to prevent double clicks
         if (submitButton) {
-            submitButton.disabled = false;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="spinner-border spinner-border-sm me-2"></i>Creating Backup...';
         }
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        // Parse the JSON response
-        const data = await response.json();
-        
-        if (data.success && data.download_url) {
-            // Trigger download using the provided URL
-            window.location.href = data.download_url;
-        } else if (data.error) {
-            alert('Backup failed: ' + data.error);
-        } else {
-            alert('Backup failed: Unknown error');
-        }
-    })
-    .catch(err => {
-        // Re-enable button on error too
-        if (submitButton) {
-            submitButton.disabled = false;
-        }
-        alert('Backup failed: ' + err.message);
-    });
-}
-    // Form submission handler - this is the *single* and correct one
-    backupForm?.addEventListener('submit', function (e) {
-        e.preventDefault(); // Always prevent default form submission here
 
         const gpgChecked = encryptCheckbox?.checked;
 
         if (gpgChecked) {
-            // Validate email
+            // Validate email for GPG
             const email = emailInput?.value.trim();
             const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!email || !emailPattern.test(email)) {
                 alert('Please provide a valid email address for GPG encryption.');
+                resetSubmitButton();
                 emailInput.focus();
-                return; // Stop here if email is invalid
+                return;
             }
 
-            // Find the modal
+            // Show GPG modal for confirmation (keeping your existing logic)
             const modalElement = document.getElementById('gpgConfirmationModal');
             if (!modalElement) {
                 alert('GPG modal not found in the DOM. Check that it\'s included correctly.');
                 console.error('Available modals:', Array.from(document.querySelectorAll('.modal')).map(m => m.id));
-                return; // Stop here if modal element is not found
+                resetSubmitButton();
+                return;
             }
 
-            // Initialize and show modal using the ES module class
+            // Initialize and show modal using your existing ES module class
             if (!window.gpgModalInstance) {
                 window.gpgModalInstance = new GPGBackupModal('gpgConfirmationModal');
             }
             window.gpgModalInstance.setEncryptionEmail(email);
-            // ONLY call submitBackupFormAJAX when the modal confirms
-            window.gpgModalInstance.onConfirm = submitBackupFormAJAX;
+            // Set the modal's onConfirm callback to our submitBackup function
+            window.gpgModalInstance.onConfirm = submitBackup;
             window.gpgModalInstance.show();
+            
+            // Reset button here since modal will handle the submission
+            resetSubmitButton();
         } else {
-            // Non-GPG backup: directly submit via AJAX
-            submitBackupFormAJAX();
+            // Regular backup
+            submitBackup();
         }
     });
 
-    // Debug function to test modal manually
+    function submitBackup() {
+        console.log('Submitting backup request...');
+        
+        const formData = new FormData(backupForm);
+        
+        fetch('/backup/create', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest' // Helps identify AJAX requests
+            }
+        })
+        .then(async response => {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Check content type
+            const contentType = response.headers.get('Content-Type');
+            console.log('Content-Type:', contentType);
+            
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                console.log('JSON response:', data);
+                
+                if (data.success && data.download_url) {
+                    console.log('Triggering download:', data.download_url);
+                    // Trigger download
+                    window.location.href = data.download_url;
+                    
+                    // Show success message
+                    setTimeout(() => {
+                        alert('Backup created successfully!');
+                    }, 500);
+                } else if (data.error) {
+                    throw new Error(data.error);
+                } else {
+                    throw new Error('Unknown response format');
+                }
+            } else {
+                // If not JSON, something went wrong
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned non-JSON response');
+            }
+        })
+        .catch(error => {
+            console.error('Backup failed:', error);
+            alert('Backup failed: ' + error.message);
+        })
+        .finally(() => {
+            resetSubmitButton();
+        });
+    }
+
+    function resetSubmitButton() {
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="bi bi-cloud-arrow-down me-2"></i>Create & Download Backup';
+        }
+    }
+
+    // Keep your existing debug functions
     window.showGpgModalManually = function () {
         const modal = document.getElementById('gpgConfirmationModal');
         if (modal) {
             if (!window.gpgModalInstance) {
                 window.gpgModalInstance = new GPGBackupModal('gpgConfirmationModal');
             }
-            // For manual test, you might want to set a dummy email or make onConfirm do something else
-            window.gpgModalInstance.setEncryptionEmail('test@example.com'); // Example
-            window.gpgModalInstance.onConfirm = () => alert('Modal confirmed manually!'); // Example
+            window.gpgModalInstance.setEncryptionEmail('test@example.com');
+            window.gpgModalInstance.onConfirm = () => alert('Modal confirmed manually!');
             window.gpgModalInstance.show();
         } else {
             console.warn('GPG modal not found. Available modals:',
@@ -363,7 +403,6 @@ function submitBackupFormAJAX() {
         }
     };
 
-    // Debug function to check what's loaded
     window.debugGpgSetup = function() {
         console.log('Form:', backupForm);
         console.log('Checkbox:', encryptCheckbox);
