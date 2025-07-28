@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -8,7 +9,7 @@ from typing import List, Dict, Optional, Any
 
 db = SQLAlchemy()
 
-class User(db.Model):
+class User(db.Model, UserMixin):
     """User model for authentication and authorization."""
     
     __tablename__ = 'users'
