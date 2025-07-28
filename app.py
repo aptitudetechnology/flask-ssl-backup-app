@@ -33,6 +33,8 @@ from routes import register_core_routes
 # --- Import Utility Functions (the GPGBackup causing the error) ---
 from utils.gpg_backup import GPGBackup as UtilityGPGBackup # Alias to avoid conflict
 from blueprints.gpg import gpg_bp
+from utils.auth import load_user
+
 
 
 def datetimeformat(value, format='%Y-%m-%d %H:%M'):
@@ -62,6 +64,8 @@ def create_app(config_name=None):
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = 'login'  # Change 'login' to your actual login endpoint if different
+    from utils.auth import load_user
+    login_manager.user_loader(load_user)
 
     # 2. Load attributes from your custom config instance into Flask's app.config dictionary
     app.config.update(custom_config_instance.get_flask_config())
