@@ -2,7 +2,7 @@ from flask import (
     Blueprint, render_template, request, jsonify, session, redirect, url_for,
     flash, send_file, current_app # Import current_app
 )
-from functools import wraps
+from flask_login import login_required
 from pathlib import Path
 import sqlite3
 from datetime import datetime
@@ -17,15 +17,7 @@ from models import db, User, BackupRecord, CustomerService
 # Define the blueprint
 backup_bp = Blueprint('backup', __name__, url_prefix='/backup')
 
-# --- Helper Functions and Decorators (Consider moving these to a utils/common module) ---
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Please log in to access this page.', 'warning')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+
 
 # --- Routes for Backup Blueprint ---
 
