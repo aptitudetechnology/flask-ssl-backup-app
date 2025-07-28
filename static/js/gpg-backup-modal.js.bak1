@@ -112,9 +112,6 @@ export function selectGPGKey(keyId) {
 /**
  * Imports the currently selected GPG key from the key server via the backend.
  */
-/**
- * Enhanced GPG key validation and import function
- */
 export function importSelectedGPGKey() {
     if (!selectedKeyId) {
         console.warn("No GPG key selected for import.");
@@ -130,7 +127,7 @@ export function importSelectedGPGKey() {
     // Show importing state
     if (importBtn) {
         importBtn.disabled = true;
-        importBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Importing & Validating...`;
+        importBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Importing...`;
     }
 
     fetch("/backup/gpg/import", {
@@ -141,33 +138,12 @@ export function importSelectedGPGKey() {
     .then(res => res.json())
     .then(data => {
         if (!data.success) {
-            // Enhanced error handling for different types of GPG errors
-            let errorMessage = data.error || 'Import failed';
-            let errorDetails = data.details || '';
-            
-            // Check for specific error types
-            if (errorMessage.includes('expired')) {
-                errorMessage = `GPG Key Has Expired`;
-                errorDetails = `The selected GPG key expired on ${extractExpirationDate(data.error)}. Please select a different key or ask the key owner to extend the expiration date.`;
-            } else if (errorMessage.includes('revoked')) {
-                errorMessage = `GPG Key Has Been Revoked`;
-                errorDetails = `This key has been revoked and cannot be used for encryption. Please select a different key.`;
-            } else if (errorMessage.includes('not found')) {
-                errorMessage = `GPG Key Not Found`;
-                errorDetails = `The key could not be imported from the keyserver. It may have been removed or is temporarily unavailable.`;
-            }
-
             if (resultsContainer) {
                 resultsContainer.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>${errorMessage}</strong>
-                    <br><small class="text-muted">${errorDetails}</small>
-                    <div class="mt-3">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="searchGPGKeys()">
-                            <i class="bi bi-arrow-clockwise me-1"></i>Search Again
-                        </button>
-                    </div>
+                    Import failed: ${data.error}
+                    <br><small class="text-muted">${data.details || ''}</small>
                 </div>`;
             }
             return;
@@ -175,27 +151,18 @@ export function importSelectedGPGKey() {
 
         // Success - update UI
         const encryptionEmail = document.getElementById("gpgModalEmail")?.value || 'selected key';
+        // Update email displays
         const encryptEmailSpan = document.getElementById("gpgEncryptEmail");
         const encryptEmailHidden = document.getElementById("gpgModalEmail");
         if (encryptEmailSpan) encryptEmailSpan.textContent = encryptionEmail;
         if (encryptEmailHidden) encryptEmailHidden.value = encryptionEmail;
 
-        // Show success message with key details
+        // Show success message and enable backup
         if (resultsContainer) {
-            const keyInfo = data.key_info || {};
             resultsContainer.innerHTML = `
             <div class="alert alert-success">
                 <i class="bi bi-check-circle me-2"></i>
-                <strong>Key imported and validated successfully!</strong>
-                <div class="mt-2 small text-muted">
-                    <div><strong>Key ID:</strong> ${keyInfo.key_id || selectedKeyId}</div>
-                    ${keyInfo.expires ? `<div><strong>Expires:</strong> ${keyInfo.expires}</div>` : ''}
-                    ${keyInfo.created ? `<div><strong>Created:</strong> ${keyInfo.created}</div>` : ''}
-                </div>
-                <div class="mt-2">
-                    <i class="bi bi-shield-check text-success me-1"></i>
-                    <small>Ready to create encrypted backup</small>
-                </div>
+                Key imported successfully! Ready to create encrypted backup.
             </div>`;
         }
 
@@ -213,210 +180,18 @@ export function importSelectedGPGKey() {
             resultsContainer.innerHTML = `
             <div class="alert alert-danger">
                 <i class="bi bi-exclamation-triangle me-2"></i>
-                <strong>Network Error</strong>
-                <br><small class="text-muted">Import request failed: ${err.message}</small>
-                <div class="mt-3">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="importSelectedGPGKey()">
-                        <i class="bi bi-arrow-repeat me-1"></i>Try Again
-                    </button>
-                </div>
+                Import request failed. Please try again.
             </div>`;
         }
     })
     .finally(() => {
-        if (importBtn && importBtn.style.display !== 'none') {
+        // This finally block ensures button state is reset if needed, though in success case it's hidden.
+        // For failed cases, it re-enables it.
+        if (importBtn && importBtn.style.display !== 'none') { // Only reset if not hidden
             importBtn.disabled = false;
             importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
         }
     });
-}
-
-/**
- * Helper function to extract expiration date from error message
- */
-function extractExpirationDate(errorMessage) {
-    const match = errorMessage.match(/expired on (\d{4}-\d{2}-\d{2})/);
-    if (match) {
-        const date = new Date(match[1]);
-        return date.toLocaleDateString();
-    }
-    return 'unknown date';
-}
-
-/**
- * Enhanced startBackup with better GPG error handling
- */
-async function enhancedStartBackup() {
-    // Prevent backup if confirm button is disabled
-    if (this.confirmCreateBackupBtn && this.confirmCreateBackupBtn.disabled) {
-        return;
-    }
-    
-    this.showStep('progress');
-    this.updateProgress(10, 'Validating GPG configuration...');
-
-    try {
-        // Get form data from the main form
-        const mainForm = document.getElementById('backupForm');
-        if (!mainForm) {
-            throw new Error('Main backup form not found');
-        }
-
-        const formData = new FormData(mainForm);
-        
-        // Ensure GPG encryption is enabled since we're in the GPG modal
-        formData.set('encrypt_gpg', 'on');
-        
-        // Get the email from the modal
-        const gpgEmail = document.getElementById('gpgModalEmail')?.value;
-        if (gpgEmail) {
-            formData.set('gpg_email', gpgEmail);
-        }
-
-        this.updateProgress(30, 'Creating backup...');
-
-        // Make the request
-        const response = await fetch('/backup/create', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
-
-        this.updateProgress(60, 'Processing backup...');
-
-        // Handle different response types
-        const contentType = response.headers.get('content-type') || '';
-        
-        if (contentType.includes('application/json')) {
-            // JSON response - could be error or success with download URL
-            const data = await response.json();
-            
-            if (!data.success) {
-                // Handle specific GPG errors
-                let errorMessage = data.error || 'Backup creation failed';
-                
-                if (errorMessage.includes('expired')) {
-                    throw new GPGError('GPG Key Expired', 
-                        `The GPG key has expired. Please select a different key or ask the key owner to extend the expiration date.`);
-                } else if (errorMessage.includes('revoked')) {
-                    throw new GPGError('GPG Key Revoked', 
-                        `The GPG key has been revoked and cannot be used for encryption.`);
-                } else if (errorMessage.includes('not found')) {
-                    throw new GPGError('GPG Key Not Found', 
-                        `The GPG key could not be found or accessed for encryption.`);
-                } else if (errorMessage.includes('GPG encryption failed')) {
-                    throw new GPGError('Encryption Failed', 
-                        `The backup could not be encrypted. This may be due to key validation issues or GPG configuration problems.`);
-                } else {
-                    throw new Error(errorMessage);
-                }
-            }
-            
-            // Success with download URL
-            if (data.download_url) {
-                this.updateProgress(90, 'Preparing download...');
-                setTimeout(() => {
-                    window.location.href = data.download_url;
-                    this.showStep('success');
-                    setTimeout(() => this.hide(), 2000);
-                }, 500);
-                return;
-            }
-        } else if (!response.ok) {
-            // Non-JSON error response
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        } else {
-            // File response - handle download
-            this.updateProgress(90, 'Preparing download...');
-            
-            const blob = await response.blob();
-            const disposition = response.headers.get('content-disposition');
-            let filename = 'encrypted_backup.gpg';
-            
-            // Extract filename from Content-Disposition header
-            if (disposition && disposition.includes('filename=')) {
-                const matches = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                if (matches && matches[1]) {
-                    filename = matches[1].replace(/['"]/g, '');
-                }
-            }
-
-            // Create download link and trigger download
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            
-            // Cleanup
-            setTimeout(() => {
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            }, 100);
-
-            this.updateProgress(100, 'Download complete!');
-            
-            // Show success and auto-close modal
-            setTimeout(() => {
-                this.showStep('success');
-                setTimeout(() => {
-                    this.hide();
-                }, 2000);
-            }, 500);
-        }
-
-    } catch (error) {
-        console.error('Backup failed:', error);
-        
-        if (error instanceof GPGError) {
-            this.showGPGError(error.title, error.message);
-        } else {
-            this.showError(error.message);
-        }
-    }
-}
-
-/**
- * Custom error class for GPG-specific errors
- */
-class GPGError extends Error {
-    constructor(title, message) {
-        super(message);
-        this.name = 'GPGError';
-        this.title = title;
-    }
-}
-
-/**
- * Enhanced error display for GPG-specific errors
- */
-function showGPGError(title, message) {
-    this.showStep('error');
-    const errorElement = document.getElementById('errorMessage');
-    if (errorElement) {
-        errorElement.innerHTML = `
-            <div class="d-flex align-items-start">
-                <i class="bi bi-shield-exclamation text-warning me-2 mt-1" style="font-size: 1.2em;"></i>
-                <div>
-                    <div class="fw-bold">${title}</div>
-                    <div class="mt-1">${message}</div>
-                    <div class="mt-3">
-                        <button class="btn btn-sm btn-outline-primary" onclick="window.gpgModalInstance?.showStep('keySetup')">
-                            <i class="bi bi-arrow-left me-1"></i>Select Different Key
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="window.gpgModalInstance?.hide()">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    this.setButtonVisibility(false, false, false); // Hide all default buttons since we have custom ones
 }
 
 /**
