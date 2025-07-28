@@ -22,7 +22,7 @@ from backup import DatabaseBackup
 from backup_gpg import GPGBackup # This is likely a different GPGBackup than utils.gpg_backup
 
 # --- NEW: Import your backup_bp blueprint ---
-from blueprints.backup_bp import backup_bp
+from blueprints.backup import backup_bp
 
 # --- NEW: Import your core routes registration function ---
 # Assuming 'routes.py' now contains 'register_core_routes(app)'
