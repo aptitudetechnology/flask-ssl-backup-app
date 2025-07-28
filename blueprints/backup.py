@@ -6,6 +6,8 @@ from functools import wraps
 from pathlib import Path
 import sqlite3
 from datetime import datetime
+backup_bp = Blueprint('backup', __name__)
+
 
 # Import models directly assuming they are initialized with your app
 # In a larger app, you might pass db to blueprints or get it via current_app
