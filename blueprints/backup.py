@@ -102,8 +102,8 @@ def create_backup_route():
         # If you want to use include_attachments, you must implement it in DatabaseBackup
         # For now, we ignore it since the method does not support it
         backup_file_path = backup_manager.create_backup(
-            compress=compress,
-            include_metadata=True  # Always include metadata for now
+        format='gz' if compress else 'db',
+        include_attachments=False
         )
 
         if not backup_file_path or not backup_file_path.exists():
