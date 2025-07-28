@@ -2,22 +2,17 @@ from flask import (
     render_template, request, jsonify, session, redirect, url_for,
     flash, current_app # Added current_app
 )
-from functools import wraps
+from flask_login import login_user, login_required
 from pathlib import Path
 import sqlite3
 from datetime import datetime
 from models import db, User, BackupRecord, CustomerService  # Import models
 # backup, backup_gpg, config are now accessed via current_app.extensions or current_app.config
 
-# --- Helper Functions and Decorators (Consider moving login_required to a common module) ---
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Please log in to access this page.', 'warning')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+from flask_login import login_user, login_required  # Import login_required decorator
+from utils.auth import load_user  # Import the user loader function
+
+
 
 # --- Register core routes (you can integrate these directly into app.py or keep them here) ---
 # This function's signature changes because managers are no longer passed directly
@@ -37,9 +32,8 @@ def register_core_routes(app): # Removed config, db, backup_manager, gpg_backup 
 
             if username and password:
                 user = User.query.filter_by(username=username).first()
-                if user and user.check_password(password):  # Assuming this method exists
-                    session['user_id'] = user.id
-                    session['username'] = user.username
+                if user and user.check_password(password):
+                    login_user(user)
                     flash('Login successful', 'success')
                     return redirect(url_for('customers'))
                 else:
