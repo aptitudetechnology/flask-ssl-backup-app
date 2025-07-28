@@ -123,7 +123,7 @@ export function importSelectedGPGKey() {
     const resultsContainer = document.getElementById("gpgKeyResults");
     const selectedKeyInfo = document.getElementById("selectedKeyInfo");
     const statusLine = document.getElementById("gpgStatusLine");
-    const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn"); // Get reference here
+    const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn");
 
     // Show importing state
     if (importBtn) {
@@ -147,11 +147,6 @@ export function importSelectedGPGKey() {
                         <br><small class="text-muted">${data.details || ''}</small>
                     </div>`;
             }
-            // Re-enable import button if import failed
-            if (importBtn) {
-                importBtn.disabled = false;
-                importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
-            }
             return;
         }
 
@@ -165,7 +160,7 @@ export function importSelectedGPGKey() {
         if (encryptEmailSpan) encryptEmailSpan.textContent = encryptionEmail;
         if (encryptEmailHidden) encryptEmailHidden.value = encryptionEmail;
 
-        // Show success message
+        // Show success message and enable backup
         if (resultsContainer) {
             resultsContainer.innerHTML = `
                 <div class="alert alert-success">
@@ -176,12 +171,10 @@ export function importSelectedGPGKey() {
 
         if (selectedKeyInfo) selectedKeyInfo.style.display = "flex";
         if (statusLine) statusLine.style.display = "none";
-        
-        // Hide import button and show confirm button
         if (importBtn) importBtn.style.display = "none";
         if (confirmBackupBtn) {
-            confirmBackupBtn.disabled = false; // Enable the button
-            confirmBackupBtn.style.display = "inline-block"; // Show the button
+            confirmBackupBtn.disabled = false;
+            confirmBackupBtn.style.display = "inline-block";
         }
     })
     .catch(err => {
@@ -193,8 +186,11 @@ export function importSelectedGPGKey() {
                     Import request failed. Please try again.
                 </div>`;
         }
-        // Re-enable import button if request failed
-        if (importBtn) {
+    })
+    .finally(() => {
+        // This finally block ensures button state is reset if needed, though in success case it's hidden.
+        // For failed cases, it re-enables it.
+        if (importBtn && importBtn.style.display !== 'none') { // Only reset if not hidden
             importBtn.disabled = false;
             importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
         }
@@ -224,27 +220,17 @@ export class GPGBackupModal {
         this.confirmCreateBackupBtn = document.getElementById('confirmCreateBackupBtn');
         this.downloadBackupBtn = document.getElementById('downloadBackupBtn');
         this.cancelBackupBtn = document.getElementById('cancelBackupBtn');
-        this.retryBackupBtn = document.getElementById('retryBackupBtn'); // New: Get retry button
 
         // Progress elements
-        this.progressBar = document.getElementById('progressBar');
-        this.progressLabel = document.getElementById('progressLabel');
-        this.progressStatus = document.getElementById('backupStatusMessage');
+        this.progressBar = document.getElementById('progressBar'); // Corrected ID
+        this.progressLabel = document.getElementById('progressLabel'); // Corrected ID
+        this.progressStatus = document.getElementById('backupStatusMessage'); // Corrected ID
 
         // Ensure the Create Encrypted Backup button has its click handler set
         if (this.confirmCreateBackupBtn) {
             this.confirmCreateBackupBtn.onclick = () => this.startBackup();
         }
-        // Ensure the Retry button has its click handler set
-        if (this.retryBackupBtn) {
-            this.retryBackupBtn.onclick = () => this.startBackup();
-        }
-        // Ensure the Cancel button has its click handler set
-        if (this.cancelBackupBtn) {
-            this.cancelBackupBtn.onclick = () => this.hide(); // Simply hide the modal
-        }
 
-        // Initial state when modal is constructed
         this.showStep('keySetup');
     }
 
@@ -276,9 +262,7 @@ export class GPGBackupModal {
         switch (stepName) {
             case 'keySetup':
                 if (this.keySetupStep) this.keySetupStep.style.display = 'block';
-                // Initial state: confirmCreateBackupBtn is hidden, importBtn is visible but disabled
-                this.setButtonVisibility(false, false, true, false);
-                
+                this.setButtonVisibility(false, false, true);
                 // Reset states for key setup
                 const resultsContainer = document.getElementById("gpgKeyResults");
                 const importBtn = document.getElementById("importKeyBtn");
@@ -297,27 +281,20 @@ export class GPGBackupModal {
                 break;
             case 'progress':
                 if (this.backupProgressStep) this.backupProgressStep.style.display = 'block';
-                this.setButtonVisibility(false, false, true, false); // Only Cancel button visible
+                this.setButtonVisibility(false, false, true);
                 break;
             case 'success':
                 if (this.successStep) this.successStep.style.display = 'block';
-                this.setButtonVisibility(false, true, true, false); // Download and Cancel buttons visible
+                this.setButtonVisibility(false, true, false);
                 break;
             case 'error':
                 if (this.errorStep) this.errorStep.style.display = 'block';
-                this.setButtonVisibility(false, false, true, true); // Cancel and Retry buttons visible
+                this.setButtonVisibility(false, false, true);
                 break;
         }
     }
 
-    /**
-     * Controls the visibility of the action buttons in the modal.
-     * @param {boolean} confirm True to show the "Create Encrypted Backup" button.
-     * @param {boolean} download True to show the "Download Backup" button.
-     * @param {boolean} cancel True to show the "Cancel" (or "Close") button.
-     * @param {boolean} retry True to show the "Try Again" button.
-     */
-    setButtonVisibility(confirm, download, cancel, retry) {
+    setButtonVisibility(confirm, download, cancel) {
         if (this.confirmCreateBackupBtn) {
             this.confirmCreateBackupBtn.style.display = confirm ? 'inline-block' : 'none';
         }
@@ -327,9 +304,6 @@ export class GPGBackupModal {
         if (this.cancelBackupBtn) {
             this.cancelBackupBtn.style.display = cancel ? 'inline-block' : 'none';
         }
-        if (this.retryBackupBtn) { // Control visibility of the new retry button
-            this.retryBackupBtn.style.display = retry ? 'inline-block' : 'none';
-        }
     }
 
     /**
@@ -337,9 +311,8 @@ export class GPGBackupModal {
      */
     async startBackup() {
         // Prevent backup if confirm button is disabled (should only be enabled after key import)
-        if (this.confirmCreateBackupBtn && this.confirmCreateBackupBtn.disabled && this.confirmCreateBackupBtn.style.display !== 'none') {
-            // This case should ideally not happen if button visibility and disabled states are managed correctly
-            console.warn("Attempted to start backup with disabled 'Create Encrypted Backup' button.");
+        if (this.confirmCreateBackupBtn && this.confirmCreateBackupBtn.disabled) {
+            // Optionally show a warning or do nothing
             return;
         }
         this.showStep('progress');
@@ -482,7 +455,7 @@ export class GPGBackupModal {
             errorElement.textContent = message;
         }
         // Also ensure download and confirm buttons are hidden, cancel visible
-        this.setButtonVisibility(false, false, true, true); // Show Cancel and Retry
+        this.setButtonVisibility(false, false, true);
     }
 
     async cancelBackup() {
@@ -517,6 +490,12 @@ export class GPGBackupModal {
         }
         if (document.getElementById("gpgStatusLine")) {
             document.getElementById("gpgStatusLine").style.display = 'none';
+        }
+        if (document.getElementById("confirmCreateBackupBtn")) {
+             document.getElementById("confirmCreateBackupBtn").style.display = 'none';
+        }
+         if (document.getElementById("downloadBackupBtn")) {
+             document.getElementById("downloadBackupBtn").style.display = 'none';
         }
         if (document.getElementById("errorMessage")) {
              document.getElementById("errorMessage").textContent = 'Unable to create encrypted backup. Please try again.';
