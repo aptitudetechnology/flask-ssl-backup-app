@@ -4,7 +4,7 @@ import gnupg
 import logging
 from pathlib import Path
 import os
-from typing import Optional, Dict, List
+from typing import Optional
 
 class GPGBackup:
     def __init__(self, config):
@@ -47,144 +47,6 @@ class GPGBackup:
             logger.addHandler(handler)
             logger.addHandler(logging.StreamHandler()) # Also log to console
         return logger
-
-    def has_public_key(self, email: str) -> bool:
-        """
-        Check if a public key exists for the given email address in the local keyring.
-        
-        Args:
-            email: Email address to search for
-            
-        Returns:
-            bool: True if a public key exists for this email, False otherwise
-        """
-        try:
-            self.logger.debug(f"Checking for public key for email: {email}")
-            
-            # Get all public keys from the local keyring
-            keys = self.gpg.list_keys()
-            
-            # Check if any key has this email in its UIDs
-            for key in keys:
-                for uid in key.get('uids', []):
-                    if email.lower() in uid.lower():
-                        self.logger.debug(f"Found public key for {email}: {key.get('keyid', 'Unknown')}")
-                        return True
-            
-            self.logger.debug(f"No public key found for {email}")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Error checking for public key for {email}: {e}")
-            return False
-
-    def get_key_info(self, email: str) -> Optional[Dict]:
-        """
-        Get detailed information about the public key for the given email.
-        
-        Args:
-            email: Email address to search for
-            
-        Returns:
-            dict: Key information including keyid, fingerprint, uids, etc. or None if not found
-        """
-        try:
-            self.logger.debug(f"Getting key info for email: {email}")
-            
-            keys = self.gpg.list_keys()
-            for key in keys:
-                for uid in key.get('uids', []):
-                    if email.lower() in uid.lower():
-                        key_info = {
-                            'keyid': key.get('keyid', 'Unknown'),
-                            'fingerprint': key.get('fingerprint', 'Unknown'),
-                            'uids': key.get('uids', []),
-                            'expires': key.get('expires', 'Never'),
-                            'length': key.get('length', 'Unknown'),
-                            'algo': key.get('algo', 'Unknown'),
-                            'trust': key.get('trust', 'Unknown'),
-                            'date': key.get('date', 'Unknown')
-                        }
-                        self.logger.debug(f"Found key info for {email}: {key_info['keyid']}")
-                        return key_info
-            
-            self.logger.debug(f"No key info found for {email}")
-            return None
-            
-        except Exception as e:
-            self.logger.error(f"Error getting key info for {email}: {e}")
-            return None
-
-    def validate_key_for_encryption(self, email: str) -> tuple[bool, str]:
-        """
-        Validate that a key is suitable for encryption.
-        
-        Args:
-            email: Email address to validate
-            
-        Returns:
-            tuple: (is_valid, error_message)
-        """
-        try:
-            key_info = self.get_key_info(email)
-            if not key_info:
-                return False, f"No public key found for {email}"
-            
-            # Check if key is expired
-            expires = key_info.get('expires')
-            if expires and expires != 'Never':
-                try:
-                    from datetime import datetime
-                    expire_date = datetime.fromtimestamp(int(expires))
-                    if expire_date < datetime.now():
-                        return False, f"Key for {email} has expired on {expire_date.strftime('%Y-%m-%d')}"
-                except (ValueError, TypeError):
-                    # If we can't parse the expiration date, assume it's okay
-                    pass
-            
-            # Check key trust level (optional - you might want to be less strict)
-            trust = key_info.get('trust', '').lower()
-            if trust in ['revoked', 'expired', 'disabled']:
-                return False, f"Key for {email} is {trust}"
-            
-            self.logger.debug(f"Key validation passed for {email}")
-            return True, "Key is valid for encryption"
-            
-        except Exception as e:
-            error_msg = f"Error validating key for {email}: {e}"
-            self.logger.error(error_msg)
-            return False, error_msg
-
-    def list_local_keys(self) -> List[Dict]:
-        """
-        List all public keys in the local keyring.
-        
-        Returns:
-            list: List of key information dictionaries
-        """
-        try:
-            keys = self.gpg.list_keys()
-            key_list = []
-            
-            for key in keys:
-                key_info = {
-                    'keyid': key.get('keyid', 'Unknown'),
-                    'fingerprint': key.get('fingerprint', 'Unknown'),
-                    'uids': key.get('uids', []),
-                    'expires': key.get('expires', 'Never'),
-                    'length': key.get('length', 'Unknown'),
-                    'algo': key.get('algo', 'Unknown'),
-                    'trust': key.get('trust', 'Unknown'),
-                    'date': key.get('date', 'Unknown')
-                }
-                key_list.append(key_info)
-            
-            self.logger.debug(f"Found {len(key_list)} keys in local keyring")
-            return key_list
-            
-        except Exception as e:
-            self.logger.error(f"Error listing local keys: {e}")
-            return []
 
     def search_keys(self, email: str) -> list:
         """
@@ -231,21 +93,15 @@ class GPGBackup:
             self.logger.error("GPG recipient email not provided for encryption.")
             return None
 
-        # Validate that we have a suitable key before attempting encryption
-        key_valid, error_msg = self.validate_key_for_encryption(recipient_email)
-        if not key_valid:
-            self.logger.error(f"Key validation failed for {recipient_email}: {error_msg}")
-            return None
-
         # === FIX 3: Access backup_dir and get_gpg_backup_filename correctly ===
         output_filepath = self.backup_dir / self.app_paths.get_gpg_backup_filename(input_filepath.name)
 
         self.logger.info(f"Encrypting {input_filepath} for {recipient_email} to {output_filepath}")
 
-        # Search for the key if not already present locally
-        if not self.has_public_key(recipient_email):
+        # Search for the key if not already present
+        if not self.gpg.list_keys(False, keys=recipient_email):
             self.logger.info(f"Recipient key for {recipient_email} not found locally. Attempting to search and import from keyserver.")
-            search_result = self.gpg.search_keys(recipient_email, keyserver=self.gpg_keyserver)
+            search_result = self.gpg.search_keys(recipient_email, keyserver=self.gpg_keyserver) # Use self.gpg_keyserver
 
             self.logger.debug(f"DEBUG: GPG search_keys result: {search_result}")
 
@@ -267,7 +123,7 @@ class GPGBackup:
                     return None
 
                 self.logger.info(f"Found keys: {identifiers}. Importing first key.")
-                import_result = self.gpg.recv_keys(self.gpg_keyserver, identifiers[0])
+                import_result = self.gpg.recv_keys(self.gpg_keyserver, identifiers[0]) # Use self.gpg_keyserver
 
                 self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
                 self.logger.debug(f"DEBUG: GPG recv_keys count: {import_result.count}")
@@ -281,7 +137,7 @@ class GPGBackup:
                     self.logger.warning(f"Failed to import key for {recipient_email}: {getattr(import_result, 'stderr', 'No error details')}")
                     return None
             else:
-                self.logger.warning(f"No public GPG key found for {recipient_email} on keyserver: {self.gpg_keyserver}")
+                self.logger.warning(f"No public GPG key found for {recipient_email} on keyserver: {self.gpg_keyserver}") # Use self.gpg_keyserver
                 return None
 
         try:
@@ -325,8 +181,8 @@ class GPGBackup:
         Returns a dictionary with success status and message.
         """
         try:
-            self.logger.info(f"Importing GPG key: {key_id} from keyserver: {self.gpg_keyserver}")
-            import_result = self.gpg.recv_keys(self.gpg_keyserver, key_id)
+            self.logger.info(f"Importing GPG key: {key_id} from keyserver: {self.gpg_keyserver}") # Use self.gpg_keyserver
+            import_result = self.gpg.recv_keys(self.gpg_keyserver, key_id) # Use self.gpg_keyserver
 
             if import_result.results:
                 imported_key = import_result.results[0]
@@ -348,8 +204,8 @@ class GPGBackup:
         Searches for a public key on a keyserver and imports it.
         """
         try:
-            self.logger.info(f"Searching for GPG keys for email: {email} on keyserver: {self.gpg_keyserver}")
-            search_result = self.gpg.search_keys(email, keyserver=self.gpg_keyserver)
+            self.logger.info(f"Searching for GPG keys for email: {email} on keyserver: {self.gpg_keyserver}") # Use self.gpg_keyserver
+            search_result = self.gpg.search_keys(email, keyserver=self.gpg_keyserver) # Use self.gpg_keyserver
 
             if search_result:
                 # Use the same logic as in create_encrypted_backup
@@ -362,7 +218,7 @@ class GPGBackup:
 
                 if identifiers:
                     self.logger.info(f"Found {len(identifiers)} key(s) for {email}. Importing...")
-                    import_result = self.gpg.recv_keys(self.gpg_keyserver, *identifiers)
+                    import_result = self.gpg.recv_keys(self.gpg_keyserver, *identifiers) # Use self.gpg_keyserver
 
                     if import_result.results:
                         self.logger.info(f"Successfully imported {import_result.count} key(s).")
@@ -374,7 +230,7 @@ class GPGBackup:
                     self.logger.warning(f"No valid identifiers found for keys: {search_result}")
                     return False
             else:
-                self.logger.warning(f"No keys found for {email} on keyserver {self.gpg_keyserver}")
+                self.logger.warning(f"No keys found for {email} on keyserver {self.gpg_keyserver}") # Use self.gpg_keyserver
                 return False
         except Exception as e:
             self.logger.error(f"Error searching/importing GPG key: {e}")
