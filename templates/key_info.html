@@ -1,0 +1,21 @@
+<!-- templates/gpg/key_info.html -->
+{% extends "base.html" %}
+
+{% block content %}
+  <h2>GPG Key Info for {{ email }}</h2>
+
+  {% if key_info %}
+    <ul>
+      <li><strong>Key ID:</strong> {{ key_info.keyid }}</li>
+      <li><strong>Fingerprint:</strong> {{ key_info.fingerprint }}</li>
+      <li><strong>UIDs:</strong> {{ key_info.uids | join(', ') }}</li>
+      <li><strong>Expires:</strong> {{ key_info.expires }}</li>
+      <li><strong>Length:</strong> {{ key_info.length }}</li>
+      <li><strong>Algorithm:</strong> {{ key_info.algo }}</li>
+      <li><strong>Trust:</strong> {{ key_info.trust }}</li>
+      <li><strong>Date Created:</strong> {{ key_info.date }}</li>
+    </ul>
+  {% else %}
+    <p>No key information available for this email.</p>
+  {% endif %}
+{% endblock %}
