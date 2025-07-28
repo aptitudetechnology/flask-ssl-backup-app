@@ -1,528 +1,381 @@
-// gpg-backup-modal.js - Enhanced Version
+# utils/gpg_backup.py
 
-// Variable to store the ID of the selected GPG key
-let selectedKeyId = null;
-let currentJobId = null; // Track the current backup job
-let progressInterval = null; // Store the progress polling interval
+import gnupg
+import logging
+from pathlib import Path
+import os
+from typing import Optional, Dict, List
 
-/**
- * Searches for GPG keys on a key server based on the provided email.
- */
-export function searchGPGKeys(email = null) {
-    // Get email from provided argument or from the hidden input within the modal
-    const gpgModalEmailInput = document.getElementById("gpgModalEmail");
-    const searchEmail = email || (gpgModalEmailInput ? gpgModalEmailInput.value.trim() : '');
-    
-    const resultsContainer = document.getElementById("gpgKeyResults");
-    const importBtn = document.getElementById("importKeyBtn");
+class GPGBackup:
+    def __init__(self, config):
+        self.config = config # Store the full config object
 
-    if (!searchEmail) {
-        if (resultsContainer) {
-            resultsContainer.innerHTML = `<div class="alert alert-warning">Please ensure an email address is provided to search for GPG keys.</div>`;
-        }
-        return;
-    }
+        # === FIX 1: Access AppPaths instance correctly ===
+        self.app_paths = config.get('APP_PATHS')
+        if not self.app_paths:
+            raise ValueError("AppPaths instance not found in Flask app config. "
+                             "Ensure app.config['APP_PATHS'] is set in your app factory.")
 
-    // Update UI to show searching status
-    if (resultsContainer) {
-        resultsContainer.innerHTML = `
-            <div class="d-flex align-items-center text-muted">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                Searching for keys for ${searchEmail}...
-            </div>`;
-    }
-    if (importBtn) {
-        importBtn.disabled = true;
-    }
-    selectedKeyId = null;
+        # Assign paths using the AppPaths instance
+        self.gpg_home_dir = self.app_paths.gpg_home_dir
+        self.backup_dir = self.app_paths.backup_dir # Added for clarity in create_encrypted_backup
 
-    fetch("/backup/gpg/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: searchEmail })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (!data.success || !data.keys || !data.keys.length) {
-            if (resultsContainer) {
-                resultsContainer.innerHTML = `
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        No GPG keys found for <strong>${searchEmail}</strong>.
-                        <br><small class="text-muted">Try searching with a different email or check if the key exists on the keyserver.</small>
-                    </div>`;
-            }
-            return;
-        }
+        # Ensure these config variables are set in your Flask app.config
+        # e.g., app.config['GPG_BINARY_PATH'] = '/usr/bin/gpg'
+        self.gnupg_bin_path = config.get('GPG_BINARY_PATH', 'gpg') # Provide a default if not set
+        self.gpg_keyserver = config.get('GPG_KEYSERVER', 'hkps://keys.openpgp.org') # Provide a default
 
-        // Enhanced key display with better formatting
-        if (resultsContainer) {
-            resultsContainer.innerHTML = `
-                <div class="alert alert-info mb-3">
-                    <i class="bi bi-info-circle me-2"></i>
-                    Found ${data.keys.length} key(s) for <strong>${searchEmail}</strong>. Select one to import:
-                </div>
-                ${data.keys.map((key, index) => {
-                    const uidText = key.uids ? key.uids.join(", ") : 'No User IDs';
-                    const createdDate = key.created ? new Date(key.created * 1000).toLocaleDateString() : 'Unknown';
-                    return `
-                        <div class="card mb-2">
-                            <div class="card-body">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="keySelect" 
-                                           id="keyRadio${index}" value="${key.key_id}" 
-                                           onchange="selectGPGKey('${key.key_id}')">
-                                    <label class="form-check-label" for="keyRadio${index}">
-                                        <div class="fw-bold">${key.key_id}</div>
-                                        <div class="text-muted small">${uidText}</div>
-                                        <div class="text-muted small">Created: ${createdDate}</div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join("")}
-            `;
-        }
-    })
-    .catch(err => {
-        console.error("GPG Key search failed:", err);
-        if (resultsContainer) {
-            resultsContainer.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    Search failed. Please check your connection and try again.
-                    <br><small class="text-muted">Error: ${err.message}</small>
-                </div>`;
-        }
-    });
-}
+        # Initialize GPG and logging using the corrected paths
+        self.gpg = self._initialize_gpg()
+        self.logger = self._setup_logging()
 
-/**
- * Sets the globally selected GPG key ID and enables the import button.
- */
-export function selectGPGKey(keyId) {
-    selectedKeyId = keyId;
-    const importBtn = document.getElementById("importKeyBtn");
-    if (importBtn) {
-        importBtn.disabled = false;
-        importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
-    }
-}
+    def _initialize_gpg(self):
+        # Ensure the GPG home directory exists (AppPaths should do this, but safe to re-confirm)
+        self.gpg_home_dir.mkdir(parents=True, exist_ok=True)
+        # gnupg.GPG expects str for gnupghome
+        return gnupg.GPG(gnupghome=str(self.gpg_home_dir), gpgbinary=self.gnupg_bin_path)
 
-/**
- * Imports the currently selected GPG key from the key server via the backend.
- */
-export function importSelectedGPGKey() {
-    if (!selectedKeyId) {
-        console.warn("No GPG key selected for import.");
-        return;
-    }
+    def _setup_logging(self):
+        # Setup specific logger for GPG operations
+        logger = logging.getLogger('gpg_backup_logger')
+        logger.setLevel(self.config.get('LOG_LEVEL', logging.INFO)) # Use .get() for config values
+        if not logger.handlers: # Prevent adding multiple handlers if called multiple times
+            # === FIX 2: Access gpg_log_file correctly ===
+            handler = logging.FileHandler(self.app_paths.gpg_log_file)
+            formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.addHandler(logging.StreamHandler()) # Also log to console
+        return logger
 
-    const importBtn = document.getElementById("importKeyBtn");
-    const resultsContainer = document.getElementById("gpgKeyResults");
-    const selectedKeyInfo = document.getElementById("selectedKeyInfo");
-    const statusLine = document.getElementById("gpgStatusLine");
-    const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn");
-
-    // Show importing state
-    if (importBtn) {
-        importBtn.disabled = true;
-        importBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Importing...`;
-    }
-
-    fetch("/backup/gpg/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key_id: selectedKeyId })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (!data.success) {
-            if (resultsContainer) {
-                resultsContainer.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        Import failed: ${data.error}
-                        <br><small class="text-muted">${data.details || ''}</small>
-                    </div>`;
-            }
-            return;
-        }
-
-        // Success - update UI
-        const encryptionEmail = document.getElementById("gpgModalEmail")?.value || 'selected key'; // Get from hidden input
+    def has_public_key(self, email: str) -> bool:
+        """
+        Check if a public key exists for the given email address in the local keyring.
         
-        // Update email displays
-        const encryptEmailSpan = document.getElementById("gpgEncryptEmail");
-        const encryptEmailHidden = document.getElementById("gpgModalEmail");
+        Args:
+            email: Email address to search for
+            
+        Returns:
+            bool: True if a public key exists for this email, False otherwise
+        """
+        try:
+            self.logger.debug(f"Checking for public key for email: {email}")
+            
+            # Get all public keys from the local keyring
+            keys = self.gpg.list_keys()
+            
+            # Check if any key has this email in its UIDs
+            for key in keys:
+                for uid in key.get('uids', []):
+                    if email.lower() in uid.lower():
+                        self.logger.debug(f"Found public key for {email}: {key.get('keyid', 'Unknown')}")
+                        return True
+            
+            self.logger.debug(f"No public key found for {email}")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking for public key for {email}: {e}")
+            return False
+
+    def get_key_info(self, email: str) -> Optional[Dict]:
+        """
+        Get detailed information about the public key for the given email.
         
-        if (encryptEmailSpan) encryptEmailSpan.textContent = encryptionEmail;
-        if (encryptEmailHidden) encryptEmailHidden.value = encryptionEmail;
+        Args:
+            email: Email address to search for
+            
+        Returns:
+            dict: Key information including keyid, fingerprint, uids, etc. or None if not found
+        """
+        try:
+            self.logger.debug(f"Getting key info for email: {email}")
+            
+            keys = self.gpg.list_keys()
+            for key in keys:
+                for uid in key.get('uids', []):
+                    if email.lower() in uid.lower():
+                        key_info = {
+                            'keyid': key.get('keyid', 'Unknown'),
+                            'fingerprint': key.get('fingerprint', 'Unknown'),
+                            'uids': key.get('uids', []),
+                            'expires': key.get('expires', 'Never'),
+                            'length': key.get('length', 'Unknown'),
+                            'algo': key.get('algo', 'Unknown'),
+                            'trust': key.get('trust', 'Unknown'),
+                            'date': key.get('date', 'Unknown')
+                        }
+                        self.logger.debug(f"Found key info for {email}: {key_info['keyid']}")
+                        return key_info
+            
+            self.logger.debug(f"No key info found for {email}")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting key info for {email}: {e}")
+            return None
 
-        // Show success message and enable backup
-        if (resultsContainer) {
-            resultsContainer.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="bi bi-check-circle me-2"></i>
-                    Key imported successfully! Ready to create encrypted backup.
-                </div>`;
-        }
-
-        if (selectedKeyInfo) selectedKeyInfo.style.display = "flex";
-        if (statusLine) statusLine.style.display = "none";
-        if (importBtn) importBtn.style.display = "none";
-        if (confirmBackupBtn) {
-            confirmBackupBtn.disabled = false;
-            confirmBackupBtn.style.display = "inline-block";
-        }
-    })
-    .catch(err => {
-        console.error("GPG Key import request failed:", err);
-        if (resultsContainer) {
-            resultsContainer.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    Import request failed. Please try again.
-                </div>`;
-        }
-    })
-    .finally(() => {
-        // This finally block ensures button state is reset if needed, though in success case it's hidden.
-        // For failed cases, it re-enables it.
-        if (importBtn && importBtn.style.display !== 'none') { // Only reset if not hidden
-            importBtn.disabled = false;
-            importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
-        }
-    });
-}
-
-/**
- * Enhanced GPGBackupModal class with real backup integration
- */
-export class GPGBackupModal {
-    constructor(modalId) {
-        this.modalElement = document.getElementById(modalId);
-        if (!this.modalElement) {
-            console.warn(`GPGBackupModal: Modal element with ID '${modalId}' not found.`);
-            return;
-        }
-
-        this.bootstrapModal = new bootstrap.Modal(this.modalElement);
+    def validate_key_for_encryption(self, email: str) -> tuple[bool, str]:
+        """
+        Validate that a key is suitable for encryption.
         
-        // Get step elements
-        this.keySetupStep = document.getElementById('keySetupStep');
-        this.backupProgressStep = document.getElementById('backupProgressStep');
-        this.successStep = document.getElementById('successStep');
-        this.errorStep = document.getElementById('errorStep');
+        Args:
+            email: Email address to validate
+            
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        try:
+            key_info = self.get_key_info(email)
+            if not key_info:
+                return False, f"No public key found for {email}"
+            
+            # Check if key is expired
+            expires = key_info.get('expires')
+            if expires and expires != 'Never':
+                try:
+                    from datetime import datetime
+                    expire_date = datetime.fromtimestamp(int(expires))
+                    if expire_date < datetime.now():
+                        return False, f"Key for {email} has expired on {expire_date.strftime('%Y-%m-%d')}"
+                except (ValueError, TypeError):
+                    # If we can't parse the expiration date, assume it's okay
+                    pass
+            
+            # Check key trust level (optional - you might want to be less strict)
+            trust = key_info.get('trust', '').lower()
+            if trust in ['revoked', 'expired', 'disabled']:
+                return False, f"Key for {email} is {trust}"
+            
+            self.logger.debug(f"Key validation passed for {email}")
+            return True, "Key is valid for encryption"
+            
+        except Exception as e:
+            error_msg = f"Error validating key for {email}: {e}"
+            self.logger.error(error_msg)
+            return False, error_msg
 
-        // Get button elements
-        this.confirmCreateBackupBtn = document.getElementById('confirmCreateBackupBtn');
-        this.downloadBackupBtn = document.getElementById('downloadBackupBtn');
-        this.cancelBackupBtn = document.getElementById('cancelBackupBtn');
-
-        // Progress elements
-        this.progressBar = document.getElementById('progressBar'); // Corrected ID
-        this.progressLabel = document.getElementById('progressLabel'); // Corrected ID
-        this.progressStatus = document.getElementById('backupStatusMessage'); // Corrected ID
-
-        // Ensure the Create Encrypted Backup button has its click handler set
-        if (this.confirmCreateBackupBtn) {
-            this.confirmCreateBackupBtn.onclick = () => this.startBackup();
-        }
-
-        this.showStep('keySetup');
-    }
-
-    show() {
-        if (this.bootstrapModal) {
-            this.bootstrapModal.show();
-            this.showStep('keySetup');
-            // Auto-search for keys when the modal is shown
-            const gpgEmail = document.getElementById('gpgModalEmail')?.value;
-            if (gpgEmail) {
-                searchGPGKeys(gpgEmail);
-            }
-        }
-    }
-
-    hide() {
-        if (this.bootstrapModal) {
-            this.bootstrapModal.hide();
-        }
-        this.cleanup();
-    }
-
-    showStep(stepName) {
-        // Hide all steps
-        [this.keySetupStep, this.backupProgressStep, this.successStep, this.errorStep]
-            .forEach(step => step && (step.style.display = 'none'));
-
-        // Show requested step and manage buttons
-        switch (stepName) {
-            case 'keySetup':
-                if (this.keySetupStep) this.keySetupStep.style.display = 'block';
-                this.setButtonVisibility(false, false, true);
-                // Reset states for key setup
-                const resultsContainer = document.getElementById("gpgKeyResults");
-                const importBtn = document.getElementById("importKeyBtn");
-                const selectedKeyInfo = document.getElementById("selectedKeyInfo");
-                const statusLine = document.getElementById("gpgStatusLine");
-
-                if (resultsContainer) resultsContainer.innerHTML = ''; // Clear previous results
-                if (importBtn) {
-                    importBtn.style.display = 'inline-block'; // Ensure button is visible
-                    importBtn.disabled = true; // Disabled until key is selected
-                    importBtn.innerHTML = `<i class="bi bi-download me-2"></i>Import Selected Key`;
+    def list_local_keys(self) -> List[Dict]:
+        """
+        List all public keys in the local keyring.
+        
+        Returns:
+            list: List of key information dictionaries
+        """
+        try:
+            keys = self.gpg.list_keys()
+            key_list = []
+            
+            for key in keys:
+                key_info = {
+                    'keyid': key.get('keyid', 'Unknown'),
+                    'fingerprint': key.get('fingerprint', 'Unknown'),
+                    'uids': key.get('uids', []),
+                    'expires': key.get('expires', 'Never'),
+                    'length': key.get('length', 'Unknown'),
+                    'algo': key.get('algo', 'Unknown'),
+                    'trust': key.get('trust', 'Unknown'),
+                    'date': key.get('date', 'Unknown')
                 }
-                if (selectedKeyInfo) selectedKeyInfo.style.display = "none";
-                if (statusLine) statusLine.style.display = "none"; // Hide initial "Checking GPG config"
-                selectedKeyId = null; // Clear selected key
-                break;
-            case 'progress':
-                if (this.backupProgressStep) this.backupProgressStep.style.display = 'block';
-                this.setButtonVisibility(false, false, true);
-                break;
-            case 'success':
-                if (this.successStep) this.successStep.style.display = 'block';
-                this.setButtonVisibility(false, true, false);
-                break;
-            case 'error':
-                if (this.errorStep) this.errorStep.style.display = 'block';
-                this.setButtonVisibility(false, false, true);
-                break;
-        }
-    }
+                key_list.append(key_info)
+            
+            self.logger.debug(f"Found {len(key_list)} keys in local keyring")
+            return key_list
+            
+        except Exception as e:
+            self.logger.error(f"Error listing local keys: {e}")
+            return []
 
-    setButtonVisibility(confirm, download, cancel) {
-        if (this.confirmCreateBackupBtn) {
-            this.confirmCreateBackupBtn.style.display = confirm ? 'inline-block' : 'none';
-        }
-        if (this.downloadBackupBtn) {
-            this.downloadBackupBtn.style.display = download ? 'inline-block' : 'none';
-        }
-        if (this.cancelBackupBtn) {
-            this.cancelBackupBtn.style.display = cancel ? 'inline-block' : 'none';
-        }
-    }
+    def search_keys(self, email: str) -> list:
+        """
+        Searches for public keys on a keyserver and returns key information.
+        Returns a list of key dictionaries with 'key_id', 'uids', 'created' etc.
+        """
+        try:
+            self.logger.info(f"Searching for GPG keys for email: {email} on keyserver: {self.gpg_keyserver}")
+            search_result = self.gpg.search_keys(email, keyserver=self.gpg_keyserver)
 
-    /**
-     * Real backup integration with your Flask backend
-     */
-    async startBackup() {
-        // Prevent backup if confirm button is disabled (should only be enabled after key import)
-        if (this.confirmCreateBackupBtn && this.confirmCreateBackupBtn.disabled) {
-            // Optionally show a warning or do nothing
-            return;
-        }
-        this.showStep('progress');
-        this.updateProgress(0, 'Initializing backup...');
+            if search_result:
+                keys = []
+                for key in search_result:
+                    key_info = {
+                        'key_id': key.get('keyid', 'Unknown'),
+                        'uids': key.get('uids', []),
+                        'created': key.get('date', 'Unknown'),
+                        'length': key.get('length', 'Unknown'),
+                        'algo': key.get('algo', 'Unknown')
+                    }
+                    if 'fingerprint' in key:
+                        key_info['fingerprint'] = key['fingerprint']
+                    keys.append(key_info)
 
-        try {
-            // Get form data
-            const formData = new FormData();
-            // These values come from the main backupForm, not directly from this modal
-            const format = document.querySelector('input[name="format"]:checked')?.value || document.getElementById('backupFormat')?.value || 'zip';
-            const includeAttachments = document.getElementById('includeAttachments')?.checked || false;
-            const gpgEmail = document.getElementById('gpgModalEmail')?.value; // Get email from modal's hidden input
+                self.logger.info(f"Found {len(keys)} key(s) for {email}")
+                return keys
+            else:
+                self.logger.warning(f"No keys found for {email} on keyserver {self.gpg_keyserver}")
+                return []
+        except Exception as e:
+            self.logger.error(f"Error searching GPG keys: {e}")
+            return []
 
-            formData.append('format', format);
-            if (includeAttachments) formData.append('include_attachments', 'on');
-            formData.append('encrypt_gpg', 'on'); // This will always be 'on' if this modal is triggered
-            formData.append('gpg_email', gpgEmail);
+    def create_encrypted_backup(self, input_filepath: Path, recipient_email: str) -> Optional[Path]:
+        """
+        Encrypts the given file using the recipient's public GPG key.
+        Returns the path to the encrypted file or None on failure.
+        """
+        if not input_filepath.exists():
+            self.logger.error(f"Input file for GPG encryption not found: {input_filepath}")
+            return None
 
-            // Start backup job
-            const response = await fetch('/backup/create', {
-                method: 'POST',
-                body: formData
-            });
+        if not recipient_email:
+            self.logger.error("GPG recipient email not provided for encryption.")
+            return None
 
-            // Check content-type to distinguish between file and JSON error
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-                // Error case: parse JSON and show error
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to start backup');
-                }
-                // If for some reason success is true, but it's JSON, treat as error
-                throw new Error('Unexpected JSON response from backup endpoint.');
-            } else {
-                // Success: file download
-                // Create a blob and trigger download
-                const blob = await response.blob();
-                const disposition = response.headers.get('content-disposition');
-                let filename = 'backup.gpg';
-                if (disposition && disposition.includes('filename=')) {
-                    filename = disposition.split('filename=')[1].split(';')[0].replace(/['"]/g, '');
-                }
-                // Create a download link
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                }, 100);
-                this.showStep('success');
-                return;
-            }
-        } catch (error) {
-            console.error('Backup failed:', error);
-            this.showError(error.message);
-        }
-    }
+        # Validate that we have a suitable key before attempting encryption
+        key_valid, error_msg = self.validate_key_for_encryption(recipient_email)
+        if not key_valid:
+            self.logger.error(f"Key validation failed for {recipient_email}: {error_msg}")
+            return None
 
-    /**
-     * Poll backup progress
-     */
-    async pollProgress() {
-        if (!currentJobId) return;
+        # === FIX 3: Access backup_dir and get_gpg_backup_filename correctly ===
+        output_filepath = self.backup_dir / self.app_paths.get_gpg_backup_filename(input_filepath.name)
 
-        // Clear any existing interval before setting a new one to prevent multiple polls
-        if (progressInterval) {
-            clearTimeout(progressInterval);
-        }
+        self.logger.info(f"Encrypting {input_filepath} for {recipient_email} to {output_filepath}")
 
-        try {
-            const response = await fetch(`/backup/progress/${currentJobId}`);
-            const data = await response.json();
+        # Search for the key if not already present locally
+        if not self.has_public_key(recipient_email):
+            self.logger.info(f"Recipient key for {recipient_email} not found locally. Attempting to search and import from keyserver.")
+            search_result = self.gpg.search_keys(recipient_email, keyserver=self.gpg_keyserver)
 
-            if (!data.success) {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                return;
-            }
+            self.logger.debug(f"DEBUG: GPG search_keys result: {search_result}")
 
-            const progress = data.progress || {};
-            this.updateProgress(progress.percentage || 0, progress.status || 'Processing...');
+            if search_result:
+                # Try to get fingerprints first, but fall back to keyids if fingerprints aren't available
+                identifiers = []
+                for key in search_result:
+                    if 'fingerprint' in key and key['fingerprint']:
+                        identifiers.append(key['fingerprint'])
+                        self.logger.info(f"Found key with fingerprint: {key['fingerprint']}")
+                    elif 'keyid' in key and key['keyid']:
+                        identifiers.append(key['keyid'])
+                        self.logger.info(f"Found key with keyid (no fingerprint): {key['keyid']}")
+                    else:
+                        self.logger.warning(f"Skipping key with no usable identifier: {key}")
 
-            if (data.completed) {
-                if (data.download_url) {
-                    this.showSuccess(data.download_url);
-                } else {
-                    throw new Error('Backup completed but no download URL provided');
-                }
-            } else {
-                // Continue polling
-                progressInterval = setTimeout(() => this.pollProgress(), 1000);
-            }
+                if not identifiers:
+                    self.logger.warning(f"No valid GPG identifiers found for {recipient_email} despite search results.")
+                    return None
 
-        } catch (error) {
-            console.error('Progress polling failed:', error);
-            this.showError(error.message);
-        }
-    }
+                self.logger.info(f"Found keys: {identifiers}. Importing first key.")
+                import_result = self.gpg.recv_keys(self.gpg_keyserver, identifiers[0])
 
-    updateProgress(percentage, status) {
-        // Ensure progress bar elements are correctly targeted by their IDs as per gpg-modal.html
-        if (this.progressBar) {
-            this.progressBar.style.width = `${percentage}%`;
-            this.progressBar.setAttribute('aria-valuenow', percentage);
-        }
-        if (this.progressLabel) { // This is for 'progressLabel'
-            this.progressLabel.textContent = `Creating backup... ${percentage}%`;
-        }
-        // The original HTML had 'progressPercentage' and 'backupStatusMessage'
-        // The JS was looking for 'progressLabel' and 'progressStatus'
-        // I've adjusted the JS properties in the constructor to match the HTML IDs more directly.
-        if (this.progressStatus) { // This is for 'backupStatusMessage'
-            this.progressStatus.textContent = status;
-        }
-    }
+                self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
+                self.logger.debug(f"DEBUG: GPG recv_keys count: {import_result.count}")
+                self.logger.debug(f"DEBUG: GPG recv_keys stderr: {getattr(import_result, 'stderr', 'No stderr available')}")
 
-    showSuccess(downloadUrl) {
-        this.showStep('success');
-        if (this.downloadBackupBtn) {
-            this.downloadBackupBtn.onclick = () => {
-                window.location.href = downloadUrl;
-                this.hide();
-            };
-        }
-        // Automatically trigger the download
-        window.location.href = downloadUrl;
-        this.hide();
-    }
+                if import_result.results:
+                    imported_key = import_result.results[0]
+                    key_info = imported_key.get('fingerprint', imported_key.get('keyid', 'Unknown'))
+                    self.logger.info(f"Key imported: {key_info}")
+                else:
+                    self.logger.warning(f"Failed to import key for {recipient_email}: {getattr(import_result, 'stderr', 'No error details')}")
+                    return None
+            else:
+                self.logger.warning(f"No public GPG key found for {recipient_email} on keyserver: {self.gpg_keyserver}")
+                return None
 
-    showError(message) {
-        this.showStep('error');
-        const errorElement = document.getElementById('errorMessage');
-        if (errorElement) {
-            errorElement.textContent = message;
-        }
-        // Also ensure download and confirm buttons are hidden, cancel visible
-        this.setButtonVisibility(false, false, true);
-    }
+        try:
+            with open(input_filepath, 'rb') as f:
+                # Use recipient_email directly with gnupg.GPG as it can resolve to key by email
+                status = self.gpg.encrypt_file(f, recipients=[recipient_email], output=str(output_filepath), always_trust=True)
 
-    async cancelBackup() {
-        if (currentJobId) {
-            try {
-                await fetch(`/backup/cancel/${currentJobId}`, { method: 'POST' });
-            } catch (error) {
-                console.error('Failed to cancel backup:', error);
-            }
-        }
-        this.cleanup();
-        this.hide();
-    }
+            if status.ok:
+                self.logger.info(f"GPG encryption successful: {output_filepath}")
+                return output_filepath
+            else:
+                self.logger.error(f"GPG encryption failed for {input_filepath.name}: {status.stderr}")
+                return None
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred during GPG encryption: {e}")
+            return None
 
-    cleanup() {
-        if (progressInterval) {
-            clearTimeout(progressInterval); // Use clearTimeout for setTimeout
-            progressInterval = null;
-        }
-        currentJobId = null;
-        selectedKeyId = null; // Clear selected key on cleanup
-        // Reset modal content/state when it's hidden for next use
-        if (document.getElementById("gpgKeyResults")) {
-            document.getElementById("gpgKeyResults").innerHTML = '';
-        }
-        if (document.getElementById("importKeyBtn")) {
-            document.getElementById("importKeyBtn").style.display = 'inline-block';
-            document.getElementById("importKeyBtn").disabled = true;
-        }
-        if (document.getElementById("selectedKeyInfo")) {
-            document.getElementById("selectedKeyInfo").style.display = 'none';
-        }
-        if (document.getElementById("gpgStatusLine")) {
-            document.getElementById("gpgStatusLine").style.display = 'none';
-        }
-        if (document.getElementById("confirmCreateBackupBtn")) {
-             document.getElementById("confirmCreateBackupBtn").style.display = 'none';
-        }
-         if (document.getElementById("downloadBackupBtn")) {
-             document.getElementById("downloadBackupBtn").style.display = 'none';
-        }
-        if (document.getElementById("errorMessage")) {
-             document.getElementById("errorMessage").textContent = 'Unable to create encrypted backup. Please try again.';
-        }
-        // Reset progress bar to 0%
-        this.updateProgress(0, '...'); 
-    }
+    def import_key_from_file(self, key_filepath: Path) -> bool:
+        """
+        Imports a public GPG key from a file.
+        """
+        if not key_filepath.exists():
+            self.logger.error(f"Key file not found: {key_filepath}")
+            return False
+        try:
+            with open(key_filepath, 'rb') as f:
+                import_result = self.gpg.import_keys(f.read())
+            if import_result.count > 0:
+                self.logger.info(f"Successfully imported {import_result.count} key(s) from {key_filepath}")
+                return True
+            else:
+                self.logger.warning(f"No keys imported from {key_filepath}: {getattr(import_result, 'stderr', 'No error details')}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error importing key from file {key_filepath}: {e}")
+            return False
 
-    setEncryptionEmail(email) {
-        // window.GPG_ENCRYPTION_EMAIL is not strictly needed if we always read from gpgModalEmail
-        // but keeping it for now if other parts of code might use it.
-        window.GPG_ENCRYPTION_EMAIL = email; 
-        const elements = ['gpgEncryptEmail', 'gpgModalEmail'];
-        elements.forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                if (element.tagName === 'INPUT') {
-                    element.value = email;
-                } else {
-                    element.textContent = email;
-                }
-            }
-        });
-    }
-}
+    def import_key(self, key_id: str) -> dict:
+        """
+        Imports a GPG key by key ID from a keyserver.
+        Returns a dictionary with success status and message.
+        """
+        try:
+            self.logger.info(f"Importing GPG key: {key_id} from keyserver: {self.gpg_keyserver}")
+            import_result = self.gpg.recv_keys(self.gpg_keyserver, key_id)
 
-// Make functions globally available for inline event handlers
-window.selectGPGKey = selectGPGKey;
-window.searchGPGKeys = searchGPGKeys;
-window.importSelectedGPGKey = importSelectedGPGKey; // Ensure this is also globally available
+            if import_result.results:
+                imported_key = import_result.results[0]
+                key_info = imported_key.get('fingerprint', imported_key.get('keyid', 'Unknown'))
+                message = f"Successfully imported key: {key_info}"
+                self.logger.info(message)
+                return {'success': True, 'message': message}
+            else:
+                error_msg = getattr(import_result, 'stderr', 'Unknown error during import')
+                self.logger.warning(f"Failed to import key {key_id}: {error_msg}")
+                return {'success': False, 'error': f"Failed to import key: {error_msg}"}
+        except Exception as e:
+            error_msg = f"Error importing GPG key {key_id}: {e}"
+            self.logger.error(error_msg)
+            return {'success': False, 'error': error_msg}
+
+    def search_and_import_key(self, email: str) -> bool:
+        """
+        Searches for a public key on a keyserver and imports it.
+        """
+        try:
+            self.logger.info(f"Searching for GPG keys for email: {email} on keyserver: {self.gpg_keyserver}")
+            search_result = self.gpg.search_keys(email, keyserver=self.gpg_keyserver)
+
+            if search_result:
+                # Use the same logic as in create_encrypted_backup
+                identifiers = []
+                for key in search_result:
+                    if 'fingerprint' in key and key['fingerprint']:
+                        identifiers.append(key['fingerprint'])
+                    elif 'keyid' in key and key['keyid']:
+                        identifiers.append(key['keyid'])
+
+                if identifiers:
+                    self.logger.info(f"Found {len(identifiers)} key(s) for {email}. Importing...")
+                    import_result = self.gpg.recv_keys(self.gpg_keyserver, *identifiers)
+
+                    if import_result.results:
+                        self.logger.info(f"Successfully imported {import_result.count} key(s).")
+                        return True
+                    else:
+                        self.logger.warning(f"Failed to import keys: {getattr(import_result, 'stderr', 'No error details')}")
+                        return False
+                else:
+                    self.logger.warning(f"No valid identifiers found for keys: {search_result}")
+                    return False
+            else:
+                self.logger.warning(f"No keys found for {email} on keyserver {self.gpg_keyserver}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error searching/importing GPG key: {e}")
+            return False
