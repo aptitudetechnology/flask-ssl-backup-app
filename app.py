@@ -20,6 +20,8 @@ from models import db, User, BackupRecord, CustomerService
 # For now, keeping your imports as is, but noting potential redundancy.
 from backup import DatabaseBackup
 from backup_gpg import GPGBackup # This is likely a different GPGBackup than utils.gpg_backup
+from flask_login import LoginManager    
+#from blueprints.gpg import gpg_bp  # Import your GPG blueprint
 
 # --- NEW: Import your backup_bp blueprint ---
 from blueprints.backup import backup_bp
@@ -55,6 +57,11 @@ def create_app(config_name=None):
         static_folder=str(custom_config_instance.paths.static_dir),
         template_folder=str(custom_config_instance.paths.templates_dir)
     )
+
+    # --- Flask-Login setup ---
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'  # Change 'login' to your actual login endpoint if different
 
     # 2. Load attributes from your custom config instance into Flask's app.config dictionary
     app.config.update(custom_config_instance.get_flask_config())
