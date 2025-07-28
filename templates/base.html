@@ -59,8 +59,8 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="#"><i class="bi bi-database me-2"></i>Database</a></li>
-                            <li><a class="nav-link {% if request.endpoint == 'gpg' %}active{% endif %}" href="{{ url_for('gpg.index') }}">
-                                <i class="bi bi-key me-2"></i>GPG Keys
+                           <li><a class="dropdown-item {% if request.endpoint == 'gpg' %}active{% endif %}" href="{{ url_for('gpg.index') }}">
+                            <i class="bi bi-key me-2"></i>GPG Keys
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#"><i class="bi bi-info-circle me-2"></i>About</a></li>
