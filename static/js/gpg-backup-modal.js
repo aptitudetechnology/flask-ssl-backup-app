@@ -10,9 +10,13 @@ let progressInterval = null; // Store the progress polling interval
  * Checks local keychain first, then searches keyserver if needed
  */
 export async function checkLocalKeysFirst(email = null) {
-    // Get email from provided argument or from the hidden input within the modal
+    // Get email from multiple possible sources
     const gpgModalEmailInput = document.getElementById("gpgModalEmail");
-    const searchEmail = email || (gpgModalEmailInput ? gpgModalEmailInput.value.trim() : '');
+    const mainPageEmailInput = document.getElementById("gpgEmail");
+    const searchEmail = email || 
+                       (gpgModalEmailInput ? gpgModalEmailInput.value.trim() : '') ||
+                       (mainPageEmailInput ? mainPageEmailInput.value.trim() : '');
+    
     const resultsContainer = document.getElementById("gpgKeyResults");
     const importBtn = document.getElementById("importKeyBtn");
     const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn");
@@ -250,6 +254,34 @@ function updateSelectedKeyInfo(email) {
 }
 
 /**
+ * NEW: Initialize modal with email from main page
+ * This bridges the gap between main page #gpgEmail and modal #gpgModalEmail
+ */
+export function initializeModalWithEmail(email) {
+    const gpgModalEmailInput = document.getElementById("gpgModalEmail");
+    const encryptEmailSpan = document.getElementById("gpgEncryptEmail");
+    const selectedKeyInfo = document.getElementById("selectedKeyInfo");
+
+    // Set the email in modal's hidden field
+    if (gpgModalEmailInput) {
+        gpgModalEmailInput.value = email;
+    }
+    
+    // Show the email in the display
+    if (encryptEmailSpan) {
+        encryptEmailSpan.textContent = email;
+    }
+    
+    // Show the selected key info section
+    if (selectedKeyInfo) {
+        selectedKeyInfo.style.display = "flex";
+    }
+
+    // Automatically start the local-first search
+    checkLocalKeysFirst(email);
+}
+
+/**
  * Enhanced GPG key validation and import function
  */
 export function importSelectedGPGKey() {
@@ -484,30 +516,107 @@ export function handleEmailInput(email) {
 }
 
 /**
+ * GPG Modal Class for managing the backup modal workflow
+ */
+export class GPGBackupModal {
+    constructor(modalId) {
+        this.modalId = modalId;
+        this.modalElement = document.getElementById(modalId);
+        this.bsModal = null;
+        this.onConfirm = null; // Callback for when backup is confirmed
+        
+        if (this.modalElement && typeof bootstrap !== 'undefined') {
+            this.bsModal = new bootstrap.Modal(this.modalElement);
+        }
+    }
+
+    show() {
+        if (this.bsModal) {
+            this.bsModal.show();
+        }
+    }
+
+    hide() {
+        if (this.bsModal) {
+            this.bsModal.hide();
+        }
+    }
+
+    setEncryptionEmail(email) {
+        // Initialize the modal with the email and start key search
+        initializeModalWithEmail(email);
+    }
+
+    onModalShown() {
+        // Called when modal is fully visible
+        // Auto-start key search if email is available
+        const email = document.getElementById("gpgModalEmail")?.value ||
+                     document.getElementById("gpgEmail")?.value;
+        if (email) {
+            checkLocalKeysFirst(email);
+        }
+    }
+
+    setupEventListeners() {
+        if (this.modalElement) {
+            // Setup confirm backup button
+            const confirmBtn = document.getElementById("confirmCreateBackupBtn");
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', () => {
+                    if (this.onConfirm) {
+                        this.onConfirm();
+                    }
+                });
+            }
+
+            // Setup modal shown event
+            this.modalElement.addEventListener('shown.bs.modal', () => {
+                this.onModalShown();
+            });
+
+            // Setup modal close cleanup
+            this.modalElement.addEventListener('hidden.bs.modal', () => {
+                handleGPGModalClose();
+            });
+        }
+    }
+}
+
+/**
  * Initialize GPG modal event listeners
  */
 export function initializeGPGModal() {
-    const gpgModalEmailInput = document.getElementById("gpgModalEmail");
-    
-    if (gpgModalEmailInput) {
-        gpgModalEmailInput.addEventListener('input', (e) => {
-            handleEmailInput(e.target.value.trim());
+    // Setup auto-search for main page email input (optional)
+    const mainPageEmailInput = document.getElementById("gpgEmail");
+    if (mainPageEmailInput) {
+        mainPageEmailInput.addEventListener('input', (e) => {
+            // Optional: could provide real-time feedback on main page
+            // For now, we'll just validate format
+            const email = e.target.value.trim();
+            if (email && !isValidEmail(email)) {
+                mainPageEmailInput.setCustomValidity('Please enter a valid email address');
+            } else {
+                mainPageEmailInput.setCustomValidity('');
+            }
         });
     }
 
-    // Add modal close event listeners
-    const gpgModal = document.getElementById("gpgModal");
-    if (gpgModal) {
-        gpgModal.addEventListener('hidden.bs.modal', handleGPGModalClose);
+    // Initialize modal class if available
+    const modalElement = document.getElementById("gpgConfirmationModal");
+    if (modalElement && !window.gpgModalInstance) {
+        window.gpgModalInstance = new GPGBackupModal("gpgConfirmationModal");
+        window.gpgModalInstance.setupEventListeners();
     }
 }
 
 // Auto-initialize when the script loads
 document.addEventListener('DOMContentLoaded', initializeGPGModal);
 
-// Make functions available globally for onclick handlers
+// Make functions available globally for onclick handlers and external access
 window.checkLocalKeysFirst = checkLocalKeysFirst;
 window.searchGPGKeys = searchGPGKeys;
 window.selectGPGKey = selectGPGKey;
 window.importSelectedGPGKey = importSelectedGPGKey;
 window.resetGPGModal = resetGPGModal;
+window.initializeModalWithEmail = initializeModalWithEmail;
+window.GPGBackupModal = GPGBackupModal;
