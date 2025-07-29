@@ -1,4 +1,4 @@
-// gpg-backup-modal.js - Local-First Implementation
+// gpg-backup-modal.js - Fixed Implementation
 
 // Variable to store the ID of the selected GPG key
 let selectedKeyId = null;
@@ -6,10 +6,144 @@ let currentJobId = null; // Track the current backup job
 let progressInterval = null; // Store the progress polling interval
 
 /**
- * NEW: Local-first key checking function
- * Checks local keychain first, then searches keyserver if needed
+ * Fixed: Ensure modal buttons are properly contained and functional
+ */
+function ensureModalButtonsIntegrity() {
+    const modal = document.getElementById("gpgConfirmationModal");
+    const importBtn = document.getElementById("importKeyBtn");
+    const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn");
+    const cancelBtn = document.getElementById("cancelBackupBtn");
+    
+    if (!modal) {
+        console.error("GPG modal not found");
+        return false;
+    }
+
+    // Ensure buttons are within modal content
+    const modalContent = modal.querySelector('.modal-content');
+    const modalFooter = modal.querySelector('.modal-footer');
+    
+    if (!modalContent || !modalFooter) {
+        console.error("Modal structure incomplete - missing .modal-content or .modal-footer");
+        return false;
+    }
+
+    // Fix button positioning by ensuring they're in the modal footer
+    if (importBtn && !modalFooter.contains(importBtn)) {
+        console.warn("Import button found outside modal footer, moving it");
+        modalFooter.appendChild(importBtn);
+    }
+    
+    if (confirmBackupBtn && !modalFooter.contains(confirmBackupBtn)) {
+        console.warn("Confirm button found outside modal footer, moving it");
+        modalFooter.appendChild(confirmBackupBtn);
+    }
+
+    if (cancelBtn && !modalFooter.contains(cancelBtn)) {
+        console.warn("Cancel button found outside modal footer, moving it");
+        modalFooter.appendChild(cancelBtn);
+    }
+
+    // Ensure proper CSS classes for modal buttons
+    [importBtn, confirmBackupBtn, cancelBtn].forEach(btn => {
+        if (btn) {
+            btn.classList.add('btn');
+            btn.style.position = 'relative'; // Ensure not absolutely positioned
+            btn.style.zIndex = 'auto';
+        }
+    });
+
+    return true;
+}
+
+/**
+ * Fixed: Properly bind event handlers to modal buttons
+ */
+function bindModalEventHandlers() {
+    const importBtn = document.getElementById("importKeyBtn");
+    const confirmBackupBtn = document.getElementById("confirmCreateBackupBtn");
+    const cancelBtn = document.getElementById("cancelBackupBtn");
+
+    // Remove existing event listeners to prevent duplicates
+    if (importBtn) {
+        importBtn.replaceWith(importBtn.cloneNode(true));
+        const newImportBtn = document.getElementById("importKeyBtn");
+        newImportBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            importSelectedGPGKey();
+        });
+    }
+
+    if (confirmBackupBtn) {
+        confirmBackupBtn.replaceWith(confirmBackupBtn.cloneNode(true));
+        const newConfirmBtn = document.getElementById("confirmCreateBackupBtn");
+        newConfirmBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleConfirmBackup();
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+        const newCancelBtn = document.getElementById("cancelBackupBtn");
+        newCancelBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCancelBackup();
+        });
+    }
+}
+
+/**
+ * Fixed: Handle confirm backup with proper error handling
+ */
+function handleConfirmBackup() {
+    const modalEmailInput = document.getElementById("gpgModalEmail");
+    const email = modalEmailInput ? modalEmailInput.value.trim() : '';
+    
+    if (!email) {
+        alert('No email address found for encryption');
+        return;
+    }
+
+    // Hide modal and trigger backup
+    const modal = bootstrap.Modal.getInstance(document.getElementById("gpgConfirmationModal"));
+    if (modal) {
+        modal.hide();
+    }
+
+    // Trigger the actual backup creation
+    if (window.createEncryptedBackup) {
+        window.createEncryptedBackup();
+    } else {
+        console.error('createEncryptedBackup function not found');
+        alert('Backup function not available. Please refresh the page and try again.');
+    }
+}
+
+/**
+ * Fixed: Handle cancel backup
+ */
+function handleCancelBackup() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById("gpgConfirmationModal"));
+    if (modal) {
+        modal.hide();
+    }
+    resetGPGModal();
+}
+
+/**
+ * NEW: Local-first key checking function with improved error handling
  */
 export async function checkLocalKeysFirst(email = null) {
+    // Ensure modal integrity before proceeding
+    if (!ensureModalButtonsIntegrity()) {
+        console.error("Modal integrity check failed");
+        return;
+    }
+
     // Get email from multiple possible sources
     const gpgModalEmailInput = document.getElementById("gpgModalEmail");
     const mainPageEmailInput = document.getElementById("gpgEmail");
@@ -221,14 +355,6 @@ async function searchKeyserverOnly(email) {
 }
 
 /**
- * LEGACY: Original searchGPGKeys function - now calls local-first approach
- * Kept for backward compatibility with any remaining calls
- */
-export function searchGPGKeys(email = null) {
-    return checkLocalKeysFirst(email);
-}
-
-/**
  * Sets the globally selected GPG key ID and enables the import button.
  */
 export function selectGPGKey(keyId) {
@@ -254,8 +380,7 @@ function updateSelectedKeyInfo(email) {
 }
 
 /**
- * NEW: Initialize modal with email from main page
- * This bridges the gap between main page #gpgEmail and modal #gpgModalEmail
+ * Initialize modal with email from main page
  */
 export function initializeModalWithEmail(email) {
     const gpgModalEmailInput = document.getElementById("gpgModalEmail");
@@ -276,6 +401,10 @@ export function initializeModalWithEmail(email) {
     if (selectedKeyInfo) {
         selectedKeyInfo.style.display = "flex";
     }
+
+    // Ensure modal integrity and bind handlers
+    ensureModalButtonsIntegrity();
+    bindModalEventHandlers();
 
     // Automatically start the local-first search
     checkLocalKeysFirst(email);
@@ -483,47 +612,14 @@ export function handleGPGModalClose() {
 }
 
 /**
- * Validate email format for GPG key search
- */
-function isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-}
-
-/**
- * Auto-search when email is entered (with debouncing)
- */
-let searchTimeout;
-export function handleEmailInput(email) {
-    // Clear existing timeout
-    if (searchTimeout) {
-        clearTimeout(searchTimeout);
-    }
-
-    // Validate email format
-    if (!isValidEmail(email)) {
-        const resultsContainer = document.getElementById("gpgKeyResults");
-        if (resultsContainer) {
-            resultsContainer.innerHTML = '';
-        }
-        return;
-    }
-
-    // Debounce the search (wait 500ms after user stops typing)
-    searchTimeout = setTimeout(() => {
-        checkLocalKeysFirst(email);
-    }, 500);
-}
-
-/**
- * GPG Modal Class for managing the backup modal workflow
+ * GPG Modal Class for managing the backup modal workflow - FIXED
  */
 export class GPGBackupModal {
     constructor(modalId) {
         this.modalId = modalId;
         this.modalElement = document.getElementById(modalId);
         this.bsModal = null;
-        this.onConfirm = null; // Callback for when backup is confirmed
+        this.onConfirm = null;
         
         if (this.modalElement && typeof bootstrap !== 'undefined') {
             this.bsModal = new bootstrap.Modal(this.modalElement);
@@ -532,6 +628,9 @@ export class GPGBackupModal {
 
     show() {
         if (this.bsModal) {
+            // Ensure modal integrity before showing
+            ensureModalButtonsIntegrity();
+            bindModalEventHandlers();
             this.bsModal.show();
         }
     }
@@ -549,6 +648,10 @@ export class GPGBackupModal {
 
     onModalShown() {
         // Called when modal is fully visible
+        // Ensure buttons are properly positioned and functional
+        ensureModalButtonsIntegrity();
+        bindModalEventHandlers();
+        
         // Auto-start key search if email is available
         const email = document.getElementById("gpgModalEmail")?.value ||
                      document.getElementById("gpgEmail")?.value;
@@ -559,16 +662,6 @@ export class GPGBackupModal {
 
     setupEventListeners() {
         if (this.modalElement) {
-            // Setup confirm backup button
-            const confirmBtn = document.getElementById("confirmCreateBackupBtn");
-            if (confirmBtn) {
-                confirmBtn.addEventListener('click', () => {
-                    if (this.onConfirm) {
-                        this.onConfirm();
-                    }
-                });
-            }
-
             // Setup modal shown event
             this.modalElement.addEventListener('shown.bs.modal', () => {
                 this.onModalShown();
@@ -583,15 +676,25 @@ export class GPGBackupModal {
 }
 
 /**
- * Initialize GPG modal event listeners
+ * Initialize GPG modal event listeners - ENHANCED
  */
 export function initializeGPGModal() {
-    // Setup auto-search for main page email input (optional)
+    // Wait for DOM to be fully loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeGPGModal);
+        return;
+    }
+
+    // Ensure modal integrity on initialization
+    setTimeout(() => {
+        ensureModalButtonsIntegrity();
+        bindModalEventHandlers();
+    }, 100);
+
+    // Setup auto-search for main page email input
     const mainPageEmailInput = document.getElementById("gpgEmail");
     if (mainPageEmailInput) {
         mainPageEmailInput.addEventListener('input', (e) => {
-            // Optional: could provide real-time feedback on main page
-            // For now, we'll just validate format
             const email = e.target.value.trim();
             if (email && !isValidEmail(email)) {
                 mainPageEmailInput.setCustomValidity('Please enter a valid email address');
@@ -609,6 +712,19 @@ export function initializeGPGModal() {
     }
 }
 
+/**
+ * Validate email format for GPG key search
+ */
+function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+// LEGACY: Original searchGPGKeys function - now calls local-first approach
+export function searchGPGKeys(email = null) {
+    return checkLocalKeysFirst(email);
+}
+
 // Auto-initialize when the script loads
 document.addEventListener('DOMContentLoaded', initializeGPGModal);
 
@@ -620,3 +736,18 @@ window.importSelectedGPGKey = importSelectedGPGKey;
 window.resetGPGModal = resetGPGModal;
 window.initializeModalWithEmail = initializeModalWithEmail;
 window.GPGBackupModal = GPGBackupModal;
+window.handleConfirmBackup = handleConfirmBackup;
+window.handleCancelBackup = handleCancelBackup;
+
+// Export for module usage (if needed)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        GPGBackupModal,
+        checkLocalKeysFirst,
+        searchGPGKeys,
+        selectGPGKey,
+        importSelectedGPGKey,
+        resetGPGModal,
+        initializeModalWithEmail
+    };
+}

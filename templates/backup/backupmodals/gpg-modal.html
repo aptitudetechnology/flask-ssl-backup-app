@@ -1,240 +1,178 @@
 <!-- GPG Encryption Confirmation Modal -->
-
 <div class="modal fade" id="gpgConfirmationModal" tabindex="-1" aria-labelledby="gpgConfirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="gpgConfirmationModalLabel">
+                    <i class="bi bi-shield-lock me-2"></i>Secure Backup Encryption
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Step 1: Key Setup -->
+                <div id="keySetupStep" class="mb-4">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-shield-check text-primary" style="font-size: 3rem;"></i>
+                        <h6 class="mt-3 mb-0">Preparing Encrypted Backup</h6>
+                        <p class="text-muted small">Search and import a public GPG key to encrypt your backup</p>
+                    </div>
 
-<div class="modal-dialog modal-lg">
+                    <div id="gpgKeyResults" class="mt-3"></div>
 
-<div class="modal-content">
+                    <div class="d-flex align-items-center mb-3" id="gpgStatusLine" style="display: none;">
+                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="text-muted">Checking GPG configuration...</span>
+                    </div>
 
-<div class="modal-header bg-primary text-white">
+                    <div class="d-flex align-items-center mb-3" style="display: none;" id="selectedKeyInfo">
+                        <i class="bi bi-envelope me-2 text-primary"></i>
+                        <strong>Encrypting for:</strong>
+                        <span class="ms-2" id="gpgEncryptEmail"></span>
+                        <input type="hidden" id="gpgModalEmail" value="">
+                    </div>
+                </div>
 
-<h5 class="modal-title" id="gpgConfirmationModalLabel">
+                <!-- Step 2: Backup Progress -->
+                <div id="backupProgressStep" class="mb-4" style="display: none;">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-cloud-arrow-down text-success" style="font-size: 3rem;"></i>
+                        <h6 class="mt-3 mb-0">Creating Encrypted Backup</h6>
+                        <p class="text-muted small">Please wait while your backup is prepared</p>
+                    </div>
+                    <div class="card border-0 bg-light">
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted" id="progressLabel">Creating backup...</small>
+                                    <small class="text-muted" id="progressPercentage">0%</small>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-success" role="progressbar" id="progressBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center" id="backupStatusMessage">
+                                <div class="spinner-border spinner-border-sm text-success me-2" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="text-muted">Generating backup archive...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-<i class="bi bi-shield-lock me-2"></i>Secure Backup Encryption
+                <!-- Success State -->
+                <div id="successStep" class="mb-4" style="display: none;">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                        <h6 class="mt-3 mb-0 text-success">Backup Ready!</h6>
+                        <p class="text-muted small">Your encrypted backup has been created successfully</p>
+                    </div>
+                </div>
 
-</h5>
+                <!-- Error State -->
+                <div id="errorStep" class="mb-4" style="display: none;">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+                        <h6 class="mt-3 mb-0 text-warning">Something went wrong</h6>
+                    </div>
+                    <div class="alert alert-warning" role="alert">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-info-circle me-2 mt-1"></i>
+                            <div>
+                                <div id="errorMessage">Unable to create encrypted backup. Please try again.</div>
+                                <div class="mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="showErrorDetails">
+                                        Show technical details
+                                    </button>
+                                </div>
+                                <div id="errorDetails" class="mt-2 small text-muted" style="display: none;">
+                                    <!-- Technical error details go here when needed -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-
+            <!-- FIXED: Simplified modal footer -->
+            <div class="modal-footer">
+                <!-- Help text -->
+                <div class="me-auto">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <span id="footerHelpText">Only you will be able to decrypt this backup</span>
+                    </small>
+                </div>
+                
+                <!-- Buttons -->
+                <button type="button" class="btn btn-outline-success me-2" id="importKeyBtn" disabled style="display: none;">
+                    <i class="bi bi-download me-2"></i>Import Selected Key
+                </button>
+                
+                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal" id="cancelBackupBtn">
+                    Cancel
+                </button>
+                
+                <button type="button" class="btn btn-primary" id="confirmCreateBackupBtn" disabled style="display: none;">
+                    <i class="bi bi-play-fill me-2"></i>Create Encrypted Backup
+                </button>
+                
+                <button type="button" class="btn btn-success" id="downloadBackupBtn" style="display: none;">
+                    <i class="bi bi-download me-2"></i>Download Backup
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="modal-body">
-
-<!-- Step 1: Key Setup -->
-
-<div id="keySetupStep" class="mb-4">
-
-<div class="text-center mb-4">
-
-<i class="bi bi-shield-check text-primary" style="font-size: 3rem;"></i>
-
-<h6 class="mt-3 mb-0">Preparing Encrypted Backup</h6>
-
-<p class="text-muted small">Search and import a public GPG key to encrypt your backup</p>
-
-</div>
-
-
-
-<div id="gpgKeyResults" class="mt-3"></div>
-
-
-<div class="d-flex align-items-center mb-3" id="gpgStatusLine" style="display: none;">
-
-<div class="spinner-border spinner-border-sm text-primary me-2" role="status">
-
-<span class="visually-hidden">Loading...</span>
-
-</div>
-
-<span class="text-muted">Checking GPG configuration...</span>
-
-</div>
-
-
-<div class="d-flex align-items-center mb-3" style="display: none;" id="selectedKeyInfo">
-
-<i class="bi bi-envelope me-2 text-primary"></i>
-
-<strong>Encrypting for:</strong>
-
-<span class="ms-2" id="gpgEncryptEmail"></span>
-
-<input type="hidden" id="gpgModalEmail" value="">
-
-</div>
-
-
-<button type="button" class="btn btn-outline-success mt-2" id="importKeyBtn" disabled onclick="importSelectedGPGKey()">
-
-<i class="bi bi-download me-2"></i>Import Selected Key
-
-</button>
-
-</div>
-
-</div>
-
-</div>
-
-
-<!-- Step 2: Backup Progress -->
-
-<div id="backupProgressStep" class="mb-4" style="display: none;">
-
-<div class="text-center mb-4">
-
-<i class="bi bi-cloud-arrow-down text-success" style="font-size: 3rem;"></i>
-
-<h6 class="mt-3 mb-0">Creating Encrypted Backup</h6>
-
-<p class="text-muted small">Please wait while your backup is prepared</p>
-
-</div>
-
-<div class="card border-0 bg-light">
-
-<div class="card-body">
-
-<div class="mb-3">
-
-<div class="d-flex justify-content-between align-items-center mb-1">
-
-<small class="text-muted" id="progressLabel">Creating backup...</small>
-
-<small class="text-muted" id="progressPercentage">0%</small>
-
-</div>
-
-<div class="progress" style="height: 8px;">
-
-<div class="progress-bar bg-success" role="progressbar" id="progressBar" style="width: 0%"></div>
-
-</div>
-
-</div>
-
-<div class="d-flex align-items-center" id="backupStatusMessage">
-
-<div class="spinner-border spinner-border-sm text-success me-2" role="status">
-
-<span class="visually-hidden">Loading...</span>
-
-</div>
-
-<span class="text-muted">Generating backup archive...</span>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-
-<!-- Success State -->
-
-<div id="successStep" class="mb-4" style="display: none;">
-
-<div class="text-center mb-4">
-
-<i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
-
-<h6 class="mt-3 mb-0 text-success">Backup Ready!</h6>
-
-<p class="text-muted small">Your encrypted backup has been created successfully</p>
-
-</div>
-
-</div>
-
-
-<!-- Error State -->
-
-<div id="errorStep" class="mb-4" style="display: none;">
-
-<div class="text-center mb-4">
-
-<i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
-
-<h6 class="mt-3 mb-0 text-warning">Something went wrong</h6>
-
-</div>
-
-<div class="alert alert-warning" role="alert">
-
-<div class="d-flex align-items-start">
-
-<i class="bi bi-info-circle me-2 mt-1"></i>
-
-<div>
-
-<div id="errorMessage">Unable to create encrypted backup. Please try again.</div>
-
-<div class="mt-2">
-
-<button type="button" class="btn btn-sm btn-outline-secondary" id="showErrorDetails">
-
-Show technical details
-
-</button>
-
-</div>
-
-<div id="errorDetails" class="mt-2 small text-muted" style="display: none;">
-
-<!-- Technical error details go here when needed -->
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-
-<div class="modal-footer">
-
-<div class="d-flex justify-content-start align-items-center w-100">
-
-<div class="text-muted small">
-
-<i class="bi bi-info-circle me-1"></i>
-
-<span id="footerHelpText">Only you will be able to decrypt this backup</span>
-
-</div>
-
-<div>
-
-<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="cancelBackupBtn">Cancel</button>
-
-<button type="button" class="btn btn-primary" id="confirmCreateBackupBtn" disabled style="display: none;">
-
-<i class="bi bi-play-fill me-2"></i>Create Encrypted Backup
-
-</button>
-
-<button type="button" class="btn btn-success" id="downloadBackupBtn" style="display: none;">
-
-<i class="bi bi-download me-2"></i>Download Backup
-
-</button>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div> 
+<!-- Ensure proper modal styling -->
+<!-- Custom CSS to ensure proper modal styling -->
+<style>
+#gpgConfirmationModal .modal-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+}
+
+#gpgConfirmationModal .modal-footer .btn {
+    position: relative !important;
+    z-index: auto !important;
+    margin: 0 !important;
+}
+
+#gpgConfirmationModal .d-flex.gap-2 > .btn {
+    margin-left: 0.5rem;
+}
+
+#gpgConfirmationModal .d-flex.gap-2 > .btn:first-child {
+    margin-left: 0;
+}
+
+/* Ensure modal stays on top */
+#gpgConfirmationModal {
+    z-index: 1060;
+}
+
+/* Fix any potential Bootstrap conflicts */
+#gpgConfirmationModal .modal-dialog {
+    position: relative;
+    width: auto;
+    margin: 0.5rem;
+    pointer-events: none;
+}
+
+#gpgConfirmationModal .modal-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    pointer-events: auto;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0,0,0,.2);
+    border-radius: 0.3rem;
+    outline: 0;
+}
+</style>
