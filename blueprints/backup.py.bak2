@@ -89,7 +89,7 @@ def create_backup_route():
         encrypt_gpg = 'encrypt_gpg' in request.form
         gpg_email = request.form.get('gpg_email')
 
-        # --- IMPROVED: Use unified key resolution for validation ---
+        # --- Validate GPG encryption requirements BEFORE creating backup ---
         if encrypt_gpg:
             if not gpg_backup:
                 return jsonify({
@@ -103,31 +103,24 @@ def create_backup_route():
                     'error': 'Email address is required for GPG encryption.'
                 }), 400
             
-            # Use unified key resolution instead of just has_public_key
+            # Check if GPG backup class has the validation method
+            if not hasattr(gpg_backup, 'has_public_key'):
+                current_app.logger.error("GPGBackup class missing has_public_key method")
+                return jsonify({
+                    'success': False, 
+                    'error': 'GPG key validation not available. Please contact administrator.'
+                }), 500
+            
+            # Validate that public key exists for the email
             try:
-                key_status = gpg_backup.get_key_with_status(gpg_email)
-                
-                if key_status['status'] == 'not_found':
+                key_exists = gpg_backup.has_public_key(gpg_email)
+                if not key_exists:
                     return jsonify({
                         'success': False, 
                         'error': f'No public key found for {gpg_email}. Please search for and import the key first.'
                     }), 400
-                elif key_status['status'] == 'error':
-                    return jsonify({
-                        'success': False, 
-                        'error': f'Unable to validate GPG key: {key_status["message"]}'
-                    }), 500
                 
-                # For local keys, do additional validation
-                if key_status['status'] == 'ready':
-                    key_valid, error_msg = gpg_backup.validate_key_for_encryption(gpg_email)
-                    if not key_valid:
-                        return jsonify({
-                            'success': False, 
-                            'error': f'GPG key validation failed: {error_msg}'
-                        }), 400
-                
-                current_app.logger.info(f"GPG key validation passed for {gpg_email} (source: {key_status['source']})")
+                current_app.logger.info(f"GPG key validation passed for {gpg_email}")
                 
             except Exception as key_check_error:
                 current_app.logger.error(f"GPG key validation failed: {str(key_check_error)}", exc_info=True)
@@ -276,86 +269,6 @@ def validate_gpg_key():
     except Exception as e:
         current_app.logger.error(f"Key validation failed: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
-
-
-# --- NEW: Local-First GPG Endpoints ---
-
-@backup_bp.route('/gpg/check-local', methods=['POST'])
-@login_required
-def gpg_check_local():
-    """
-    Check only the local keychain for a GPG key without hitting keyserver.
-    Expects JSON body: {"email": "user@example.com"}
-    Returns JSON: {"found": true, "key_info": {...}} or {"found": false}
-    """
-    try:
-        gpg_backup = current_app.extensions.get('utility_gpg_backup')
-        if not gpg_backup:
-            return jsonify({'success': False, 'error': 'GPG Backup manager not initialized'}), 500
-
-        data = request.get_json()
-        email = data.get('email')
-
-        if not email:
-            return jsonify({'success': False, 'error': 'Email address is required'}), 400
-
-        if not hasattr(gpg_backup, 'check_local_key_only'):
-            return jsonify({'success': False, 'error': 'Local key checking not available'}), 500
-
-        current_app.logger.info(f"Checking local keychain only for: {email}")
-        result = gpg_backup.check_local_key_only(email)
-        
-        return jsonify({
-            'success': True,
-            'found': result['found'],
-            'key_info': result['key_info'],
-            'email': result['email'],
-            'message': result['message']
-        })
-
-    except Exception as e:
-        current_app.logger.error(f"Local key check failed: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'error': f'Failed to check local keys: {str(e)}'}), 500
-
-
-@backup_bp.route('/gpg/get-with-status', methods=['POST'])
-@login_required
-def gpg_get_with_status():
-    """
-    Unified key resolution endpoint that checks local first, then keyserver.
-    Expects JSON body: {"email": "user@example.com"}
-    Returns JSON with source information and status updates.
-    """
-    try:
-        gpg_backup = current_app.extensions.get('utility_gpg_backup')
-        if not gpg_backup:
-            return jsonify({'success': False, 'error': 'GPG Backup manager not initialized'}), 500
-
-        data = request.get_json()
-        email = data.get('email')
-
-        if not email:
-            return jsonify({'success': False, 'error': 'Email address is required'}), 400
-
-        if not hasattr(gpg_backup, 'get_key_with_status'):
-            return jsonify({'success': False, 'error': 'Unified key resolution not available'}), 500
-
-        current_app.logger.info(f"Starting unified key resolution for: {email}")
-        result = gpg_backup.get_key_with_status(email)
-        
-        return jsonify({
-            'success': True,
-            'source': result['source'],
-            'status': result['status'],
-            'key_info': result['key_info'],
-            'keys': result['keys'],
-            'email': result['email'],
-            'message': result['message']
-        })
-
-    except Exception as e:
-        current_app.logger.error(f"Unified key resolution failed: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'error': f'Failed to resolve keys: {str(e)}'}), 500
 
 
 @backup_bp.route('/list')

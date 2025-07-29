@@ -18,123 +18,6 @@ class GPGBackup:
     def get_key_info_for_template(self, email: str) -> Optional[Dict]:
         """Return key info ready for direct use in Jinja templates."""
         return self.get_key_info(email)
-
-    # ---------------- NEW: Unified Key Resolution ----------------
-    def get_key_with_status(self, email: str) -> Dict:
-        """
-        Unified key resolution method that checks local keychain first,
-        then searches keyserver only if needed.
-        
-        Args:
-            email: Email address to search for
-            
-        Returns:
-            dict: {
-                'source': 'local' | 'keyserver' | 'none',
-                'status': 'ready' | 'found' | 'not_found',
-                'key_info': dict | None,  # For local keys
-                'keys': list | None,      # For keyserver results
-                'email': str,
-                'message': str
-            }
-        """
-        try:
-            self.logger.info(f"Starting unified key resolution for {email}")
-            
-            # Step 1: Check local keychain first
-            if self.has_public_key(email):
-                key_info = self.get_key_info(email)
-                self.logger.info(f"Found key locally for {email}: {key_info.get('keyid', 'Unknown') if key_info else 'No details'}")
-                
-                return {
-                    'source': 'local',
-                    'status': 'ready',
-                    'key_info': key_info,
-                    'keys': None,
-                    'email': email,
-                    'message': f'Key found locally for {email}'
-                }
-            
-            # Step 2: Search keyserver only if not found locally
-            self.logger.info(f"Key not found locally for {email}, searching keyserver...")
-            keyserver_results = self.search_keys(email)
-            
-            if keyserver_results:
-                self.logger.info(f"Found {len(keyserver_results)} key(s) on keyserver for {email}")
-                return {
-                    'source': 'keyserver',
-                    'status': 'found',
-                    'key_info': None,
-                    'keys': keyserver_results,
-                    'email': email,
-                    'message': f'Found {len(keyserver_results)} key(s) on keyserver for {email}'
-                }
-            
-            # Step 3: Not found anywhere
-            self.logger.warning(f"No keys found anywhere for {email}")
-            return {
-                'source': 'none',
-                'status': 'not_found',
-                'key_info': None,
-                'keys': None,
-                'email': email,
-                'message': f'No keys found for {email}'
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error in unified key resolution for {email}: {e}")
-            return {
-                'source': 'none',
-                'status': 'error',
-                'key_info': None,
-                'keys': None,
-                'email': email,
-                'message': f'Error searching for keys: {str(e)}'
-            }
-
-    def check_local_key_only(self, email: str) -> Dict:
-        """
-        Check only the local keychain for a key, without hitting keyserver.
-        
-        Args:
-            email: Email address to search for
-            
-        Returns:
-            dict: {
-                'found': bool,
-                'key_info': dict | None,
-                'email': str,
-                'message': str
-            }
-        """
-        try:
-            self.logger.debug(f"Checking local keychain only for {email}")
-            
-            if self.has_public_key(email):
-                key_info = self.get_key_info(email)
-                return {
-                    'found': True,
-                    'key_info': key_info,
-                    'email': email,
-                    'message': f'Key found locally for {email}'
-                }
-            else:
-                return {
-                    'found': False,
-                    'key_info': None,
-                    'email': email,
-                    'message': f'No local key found for {email}'
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error checking local key for {email}: {e}")
-            return {
-                'found': False,
-                'key_info': None,
-                'email': email,
-                'message': f'Error checking local key: {str(e)}'
-            }
-
     def __init__(self, config):
         self.config = config # Store the full config object
 
@@ -350,8 +233,6 @@ class GPGBackup:
         """
         Encrypts the given file using the recipient's public GPG key.
         Returns the path to the encrypted file or None on failure.
-        
-        UPDATED: Uses local-first approach via get_key_with_status()
         """
         if not input_filepath.exists():
             self.logger.error(f"Input file for GPG encryption not found: {input_filepath}")
@@ -361,54 +242,58 @@ class GPGBackup:
             self.logger.error("GPG recipient email not provided for encryption.")
             return None
 
-        # === IMPROVED: Use unified key resolution ===
-        key_status = self.get_key_with_status(recipient_email)
-        
-        if key_status['status'] == 'ready':
-            # Key exists locally, validate it for encryption
-            key_valid, error_msg = self.validate_key_for_encryption(recipient_email)
-            if not key_valid:
-                self.logger.error(f"Local key validation failed for {recipient_email}: {error_msg}")
-                return None
-            self.logger.info(f"Using local key for encryption: {recipient_email}")
-            
-        elif key_status['status'] == 'found':
-            # Key found on keyserver, need to import it
-            keys_to_import = key_status['keys']
-            if not keys_to_import:
-                self.logger.error(f"No keys to import for {recipient_email}")
-                return None
-                
-            # Import the first available key
-            identifiers = []
-            for key in keys_to_import:
-                if 'fingerprint' in key and key['fingerprint']:
-                    identifiers.append(key['fingerprint'])
-                elif 'key_id' in key and key['key_id']:
-                    identifiers.append(key['key_id'])
-                    
-            if not identifiers:
-                self.logger.error(f"No valid identifiers found for keys: {keys_to_import}")
-                return None
-                
-            self.logger.info(f"Importing key for {recipient_email}: {identifiers[0]}")
-            import_result = self.gpg.recv_keys(self.gpg_keyserver, identifiers[0])
-            
-            if not import_result.results:
-                self.logger.error(f"Failed to import key for {recipient_email}: {getattr(import_result, 'stderr', 'No error details')}")
-                return None
-                
-            self.logger.info(f"Key imported successfully for {recipient_email}")
-            
-        else:
-            # Key not found anywhere
-            self.logger.error(f"No key found for {recipient_email}: {key_status['message']}")
+        # Validate that we have a suitable key before attempting encryption
+        key_valid, error_msg = self.validate_key_for_encryption(recipient_email)
+        if not key_valid:
+            self.logger.error(f"Key validation failed for {recipient_email}: {error_msg}")
             return None
 
         # === FIX 3: Access backup_dir and get_gpg_backup_filename correctly ===
         output_filepath = self.backup_dir / self.app_paths.get_gpg_backup_filename(input_filepath.name)
 
         self.logger.info(f"Encrypting {input_filepath} for {recipient_email} to {output_filepath}")
+
+        # Search for the key if not already present locally
+        if not self.has_public_key(recipient_email):
+            self.logger.info(f"Recipient key for {recipient_email} not found locally. Attempting to search and import from keyserver.")
+            search_result = self.gpg.search_keys(recipient_email, keyserver=self.gpg_keyserver)
+
+            self.logger.debug(f"DEBUG: GPG search_keys result: {search_result}")
+
+            if search_result:
+                # Try to get fingerprints first, but fall back to keyids if fingerprints aren't available
+                identifiers = []
+                for key in search_result:
+                    if 'fingerprint' in key and key['fingerprint']:
+                        identifiers.append(key['fingerprint'])
+                        self.logger.info(f"Found key with fingerprint: {key['fingerprint']}")
+                    elif 'keyid' in key and key['keyid']:
+                        identifiers.append(key['keyid'])
+                        self.logger.info(f"Found key with keyid (no fingerprint): {key['keyid']}")
+                    else:
+                        self.logger.warning(f"Skipping key with no usable identifier: {key}")
+
+                if not identifiers:
+                    self.logger.warning(f"No valid GPG identifiers found for {recipient_email} despite search results.")
+                    return None
+
+                self.logger.info(f"Found keys: {identifiers}. Importing first key.")
+                import_result = self.gpg.recv_keys(self.gpg_keyserver, identifiers[0])
+
+                self.logger.debug(f"DEBUG: GPG recv_keys result: {import_result.results}")
+                self.logger.debug(f"DEBUG: GPG recv_keys count: {import_result.count}")
+                self.logger.debug(f"DEBUG: GPG recv_keys stderr: {getattr(import_result, 'stderr', 'No stderr available')}")
+
+                if import_result.results:
+                    imported_key = import_result.results[0]
+                    key_info = imported_key.get('fingerprint', imported_key.get('keyid', 'Unknown'))
+                    self.logger.info(f"Key imported: {key_info}")
+                else:
+                    self.logger.warning(f"Failed to import key for {recipient_email}: {getattr(import_result, 'stderr', 'No error details')}")
+                    return None
+            else:
+                self.logger.warning(f"No public GPG key found for {recipient_email} on keyserver: {self.gpg_keyserver}")
+                return None
 
         try:
             with open(input_filepath, 'rb') as f:
